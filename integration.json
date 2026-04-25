@@ -11,7 +11,7 @@
     "contact": "Telegram: @Lyvner"
   },
   "repo": "https://github.com/jalopy1/dkg-wm-bridge",
-  "commit": "6f931be0bea0666ee15f7f3734ce98cfff865cd1",
+  "commit": "ff31ca4d84e6dd4a66baf7012fd973b659b8a2a1",
   "license": "Apache-2.0",
   "requiresDkgNodeVersion": ">=10.0.0",
   "memoryLayers": ["WM", "SWM"],
