@@ -191,7 +191,8 @@ export async function ingestFile(filePath: string, opts: IngestOptions): Promise
           const importResult = await opts.client.importFile(
             opts.contextGraph, chunkName, chunkBuf, chunkFileName, contentType,
           );
-          extractedTriples += (importResult.tripleCount as number) ?? 0;
+          const ext = (importResult as any).extraction;
+          extractedTriples += ext?.tripleCount ?? (importResult.tripleCount as number) ?? 0;
         } catch (err) {
           // If import-file fails (e.g. extraction not supported), fall back to raw write
           const { written } = await opts.client.writeAssertion(opts.contextGraph, chunkName, provQuads);
@@ -204,7 +205,8 @@ export async function ingestFile(filePath: string, opts: IngestOptions): Promise
         const importResult = await opts.client.importFile(
           opts.contextGraph, name, content, fileName, contentType,
         );
-        extractedTriples = (importResult.tripleCount as number) ?? 0;
+        const ext = (importResult as any).extraction;
+        extractedTriples = ext?.tripleCount ?? (importResult.tripleCount as number) ?? 0;
       } catch (err) {
         // Fallback: if import pipeline fails, write provenance quads directly
         const { written } = await opts.client.writeAssertion(opts.contextGraph, name, provQuads);
@@ -283,7 +285,8 @@ export async function ingestText(
       const importResult = await opts.client.importFile(
         opts.contextGraph, name, buf, `${title}.md`, 'text/markdown',
       );
-      extractedTriples = (importResult.tripleCount as number) ?? 0;
+      const ext = (importResult as any).extraction;
+      extractedTriples = ext?.tripleCount ?? (importResult.tripleCount as number) ?? 0;
     } catch {
       // Fallback to direct quad write
       const { written } = await opts.client.writeAssertion(opts.contextGraph, name, provQuads);
