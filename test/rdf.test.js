@@ -47,7 +47,7 @@ describe('assertionName', () => {
       content: 'test',
       kind: 'memory-daily',
       timestamp: '2026-04-25T00:00:00Z',
-      agent: 'Navi',
+      agent: 'TestAgent',
       status: 'draft',
     };
     const name1 = assertionName(meta);
@@ -57,7 +57,7 @@ describe('assertionName', () => {
   });
 
   it('produces different names for different sources', () => {
-    const base = { title: 'Test', content: 'x', kind: 'document', timestamp: '2026-04-25T00:00:00Z', agent: 'Navi', status: 'draft' };
+    const base = { title: 'Test', content: 'x', kind: 'document', timestamp: '2026-04-25T00:00:00Z', agent: 'TestAgent', status: 'draft' };
     const n1 = assertionName({ ...base, source: 'a.md' });
     const n2 = assertionName({ ...base, source: 'b.md' });
     assert.notEqual(n1, n2);
@@ -72,7 +72,7 @@ describe('artifactToQuads', () => {
       content: 'Hello world',
       kind: 'document',
       timestamp: '2026-04-25T12:00:00Z',
-      agent: 'Navi',
+      agent: 'TestAgent',
       status: 'draft',
       tags: ['test', 'demo'],
     };
@@ -84,7 +84,7 @@ describe('artifactToQuads', () => {
   it('includes schema.org type', () => {
     const meta = {
       source: 'test.md', title: 'T', content: 'C', kind: 'document',
-      timestamp: '2026-04-25T00:00:00Z', agent: 'Navi', status: 'draft',
+      timestamp: '2026-04-25T00:00:00Z', agent: 'TestAgent', status: 'draft',
     };
     const quads = artifactToQuads(meta);
     const typeQuad = quads.find(q => q.predicate.includes('rdf-syntax-ns#type') && q.object.includes('schema.org'));
@@ -94,7 +94,7 @@ describe('artifactToQuads', () => {
   it('includes provenance', () => {
     const meta = {
       source: 'test.md', title: 'T', content: 'C', kind: 'document',
-      timestamp: '2026-04-25T00:00:00Z', agent: 'Navi', status: 'draft',
+      timestamp: '2026-04-25T00:00:00Z', agent: 'TestAgent', status: 'draft',
     };
     const quads = artifactToQuads(meta);
     const provQuad = quads.find(q => q.predicate.includes('prov#wasGeneratedBy'));
@@ -104,7 +104,7 @@ describe('artifactToQuads', () => {
   it('uses DKG peer ID when provided', () => {
     const meta = {
       source: 'test.md', title: 'T', content: 'C', kind: 'document',
-      timestamp: '2026-04-25T00:00:00Z', agent: 'Navi', agentPeerId: '12D3KooWTest', status: 'draft',
+      timestamp: '2026-04-25T00:00:00Z', agent: 'TestAgent', agentPeerId: '12D3KooWTest', status: 'draft',
     };
     const quads = artifactToQuads(meta);
     const agentQuad = quads.find(q => q.object.includes('did:dkg:agent:12D3KooWTest'));

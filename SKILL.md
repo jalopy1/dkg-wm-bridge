@@ -53,7 +53,7 @@ Show assertion details and lifecycle history.
 Multiple agents can share a Context Graph:
 ```bash
 # Agent 1 (OpenClaw)
-wm-bridge init --agent Navi --framework openclaw -c team-research
+wm-bridge init --agent MyAgent --framework openclaw -c team-research
 
 # Agent 2 (Hermes)
 wm-bridge init --agent Hermes --framework hermes -c team-research

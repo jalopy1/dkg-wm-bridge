@@ -22,7 +22,7 @@ npm install -g dkg-wm-bridge
 wm-bridge check
 
 # Initialize for your agent (OpenClaw, Hermes, or generic)
-wm-bridge init --agent Navi --framework openclaw
+wm-bridge init --agent MyAgent --framework openclaw
 wm-bridge init --agent Hermes --framework hermes
 
 # Ingest a single file
@@ -75,7 +75,7 @@ The bridge is agent-agnostic. Run `init` once per agent to configure identity an
 
 ```bash
 # OpenClaw agent
-wm-bridge init --agent Navi --framework openclaw -c navi-artifacts
+wm-bridge init --agent MyAgent --framework openclaw -c my-artifacts
 
 # Hermes agent on the same node
 wm-bridge init --agent Hermes --framework hermes -c hermes-artifacts

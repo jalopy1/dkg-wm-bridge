@@ -12,8 +12,8 @@ node dist/cli.js check
 echo ""
 
 # 2. Initialize (idempotent)
-echo "--- Step 2: Initialize for Navi (OpenClaw) ---"
-node dist/cli.js init --agent Navi --framework openclaw -c demo-artifacts
+echo "--- Step 2: Initialize for demo agent (OpenClaw) ---"
+node dist/cli.js init --agent DemoAgent --framework openclaw -c demo-artifacts
 echo ""
 
 # 3. Create a sample artifact
