@@ -1,7 +1,11 @@
 /**
  * RDF triple generation utilities.
- * Uses schema.org vocabulary + custom provenance ontology.
- * All URIs are deterministic from content for idempotent writes.
+ *
+ * Two quad generators:
+ *   - provenanceQuads(): metadata, provenance, status tags (used with import pipeline)
+ *   - artifactToQuads(): full quads including content blob (legacy fallback)
+ *
+ * Uses schema.org + PROV-O vocabulary for interoperability.
  */
 
 import { createHash } from 'node:crypto';
@@ -14,7 +18,7 @@ const RDF = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#';
 const XSD = 'http://www.w3.org/2001/XMLSchema#';
 const PROV = 'http://www.w3.org/ns/prov#';
 const DCTERMS = 'http://purl.org/dc/terms/';
-const WMB = 'urn:openclaw:wm-bridge:';
+const WMB = 'urn:dkg:wm-bridge:';
 const WMBO = `${WMB}ontology/`;
 
 // -- Status tags (trust gradient markers) -------------------------------------
@@ -56,6 +60,10 @@ function artifactUri(meta: ArtifactMeta): string {
   return `${WMB}artifact/${hash}`;
 }
 
+function agentUri(meta: ArtifactMeta): string {
+  return meta.agentPeerId ? `did:dkg:agent:${meta.agentPeerId}` : `${WMB}agent/${meta.agent}`;
+}
+
 function literal(value: string, datatype?: string): string {
   const escaped = value
     .replace(/\\/g, '\\\\')
@@ -71,36 +79,36 @@ function dateLiteral(iso: string): string {
   return literal(iso, `${XSD}dateTime`);
 }
 
-// -- Triple generation --------------------------------------------------------
+// -- Provenance quads (used with import pipeline) -----------------------------
 
 /**
- * Convert an artifact into RDF quads suitable for DKG Working Memory.
- * Uses schema.org for interoperability and PROV-O for provenance.
+ * Generate provenance + status metadata quads only.
+ * Used alongside the node's import-file pipeline which handles content extraction.
+ * Does NOT include the raw text content — the node's extraction pipeline does that.
  */
-export function artifactToQuads(meta: ArtifactMeta): Quad[] {
+export function provenanceQuads(meta: ArtifactMeta): Quad[] {
   const uri = artifactUri(meta);
-  const agentUri = meta.agentPeerId ? `did:dkg:agent:${meta.agentPeerId}` : `${WMB}agent/${meta.agent}`;
+  const agent = agentUri(meta);
   const quads: Quad[] = [];
 
   const q = (s: string, p: string, o: string) => quads.push({ subject: s, predicate: p, object: o });
 
-  // -- Type
+  // -- Type markers
   q(uri, `${RDF}type`, `${SCHEMA}DigitalDocument`);
   q(uri, `${RDF}type`, `${WMBO}AgentArtifact`);
 
-  // -- Core metadata (schema.org)
+  // -- Core metadata (no content blob)
   q(uri, `${SCHEMA}name`, literal(meta.title));
-  q(uri, `${SCHEMA}text`, literal(meta.content));
   q(uri, `${SCHEMA}dateCreated`, dateLiteral(meta.timestamp));
-  q(uri, `${SCHEMA}author`, agentUri);
+  q(uri, `${SCHEMA}author`, agent);
   q(uri, `${SCHEMA}encodingFormat`, literal('text/markdown'));
 
   // -- Provenance (PROV-O + DC Terms)
-  q(uri, `${PROV}wasGeneratedBy`, agentUri);
+  q(uri, `${PROV}wasGeneratedBy`, agent);
   q(uri, `${PROV}generatedAtTime`, dateLiteral(meta.timestamp));
   q(uri, `${DCTERMS}source`, literal(meta.source));
 
-  // -- WM Bridge ontology (status, kind, promotion readiness)
+  // -- WM Bridge ontology (status, kind)
   q(uri, `${WMBO}artifactKind`, literal(meta.kind));
   q(uri, `${WMBO}status`, literal(meta.status));
   q(uri, `${WMBO}sourceFile`, literal(meta.source));
@@ -113,15 +121,32 @@ export function artifactToQuads(meta: ArtifactMeta): Quad[] {
   }
 
   // -- Agent identity
-  q(agentUri, `${RDF}type`, `${PROV}SoftwareAgent`);
-  q(agentUri, `${SCHEMA}name`, literal(meta.agent));
+  q(agent, `${RDF}type`, `${PROV}SoftwareAgent`);
+  q(agent, `${SCHEMA}name`, literal(meta.agent));
 
   return quads;
 }
 
+// -- Full quads (legacy fallback) ---------------------------------------------
+
+/**
+ * Generate ALL quads including raw text content.
+ * Used as fallback when the node's import pipeline is unavailable.
+ */
+export function artifactToQuads(meta: ArtifactMeta): Quad[] {
+  const uri = artifactUri(meta);
+  const quads = provenanceQuads(meta);
+
+  // Add the raw content blob (not included in provenanceQuads)
+  quads.splice(4, 0, { subject: uri, predicate: `${SCHEMA}text`, object: literal(meta.content) });
+
+  return quads;
+}
+
+// -- Utilities ----------------------------------------------------------------
+
 /**
  * Generate a deterministic assertion name from artifact metadata.
- * Keeps assertions organized and idempotent.
  */
 export function assertionName(meta: ArtifactMeta): string {
   const hash = sourceHash(`${meta.source}:${meta.timestamp}`);

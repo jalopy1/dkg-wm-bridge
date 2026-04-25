@@ -1,6 +1,7 @@
 export { DkgClient, type ClientOptions, type Quad } from './dkg-client.js';
 export {
   artifactToQuads,
+  provenanceQuads,
   assertionName,
   extractTitle,
   detectKind,

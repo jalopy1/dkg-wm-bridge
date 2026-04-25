@@ -230,7 +230,8 @@ async function main() {
             console.log(`❌ ${r.file} — ${r.error}`);
             fail++;
           } else {
-            console.log(`✅ ${r.file} → ${r.assertionName} (${r.quadCount} quads)`);
+            const triples = r.extractedTriples ? ` + ${r.extractedTriples} extracted` : '';
+            console.log(`✅ ${r.file} → ${r.assertionName} (${r.provenanceQuads} provenance${triples})`);
             ok++;
           }
         }
@@ -241,7 +242,8 @@ async function main() {
           console.error(`❌ ${result.file} — ${result.error}`);
           process.exit(1);
         }
-        console.log(`✅ ${result.file} → ${result.assertionName} (${result.quadCount} quads)`);
+        const triples = result.extractedTriples ? ` + ${result.extractedTriples} extracted` : '';
+        console.log(`✅ ${result.file} → ${result.assertionName} (${result.provenanceQuads} provenance${triples})`);
       }
       break;
     }
@@ -268,7 +270,8 @@ async function main() {
         console.error(`❌ ${result.error}`);
         process.exit(1);
       }
-      console.log(`✅ "${title}" → ${result.assertionName} (${result.quadCount} quads)`);
+      const triples = result.extractedTriples ? ` + ${result.extractedTriples} extracted` : '';
+      console.log(`✅ "${title}" → ${result.assertionName} (${result.provenanceQuads} provenance${triples})`);
       break;
     }
 
