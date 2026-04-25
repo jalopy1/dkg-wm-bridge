@@ -27,7 +27,7 @@ The DKG v10 memory model solves all three problems — but only if artifacts act
 - **Context Graph** — Each project/workspace gets a dedicated Context Graph that organizes its artifacts.
 - **Assertion** — Each artifact maps to a named assertion in Working Memory. Assertions are created via `POST /api/assertion/create` and written via `POST /api/assertion/:name/write`.
 - **Entity** — Artifacts are typed as `schema:DigitalDocument` + `wmbo:AgentArtifact` entities with structured properties.
-- **UAL** — Artifact URIs are deterministic (`urn:openclaw:wm-bridge:artifact/<hash>`), enabling stable references across the trust gradient.
+- **UAL** — Artifact URIs are deterministic (`urn:dkg:wm-bridge:artifact/<hash>`), enabling stable references across the trust gradient.
 
 ## 5. LLM-Wiki / Autoresearch Fit
 
@@ -92,7 +92,7 @@ This integration is designed so that artifacts maturing through the trust gradie
 
 2. **Shared Memory (Round 1):** The `promote` command moves reviewed artifacts to SWM. Status transitions: `draft` → `reviewed` → `promote-ready` → `promoted`. Other agents on the Context Graph can discover and build on promoted artifacts.
 
-3. **Verified Memory (Round 2):** Artifacts carry deterministic URIs (`urn:openclaw:wm-bridge:artifact/<hash>`) that remain stable through promotion. The `verified-ready` status tag signals artifacts that have been reviewed and are candidates for on-chain anchoring. The schema.org + PROV-O metadata structure is already compatible with ClaimReview (the standard used by context oracles for claim verification).
+3. **Verified Memory (Round 2):** Artifacts carry deterministic URIs (`urn:dkg:wm-bridge:artifact/<hash>`) that remain stable through promotion. The `verified-ready` status tag signals artifacts that have been reviewed and are candidates for on-chain anchoring. The schema.org + PROV-O metadata structure is already compatible with ClaimReview (the standard used by context oracles for claim verification).
 
 4. **Context Oracle consumption (Round 2):** The structured provenance (who created it, when, from what source) and status tags (trust gradient position) are exactly the inputs a context oracle needs to assess claim credibility. Our existing Context Oracle project (built for Round 2) will consume these artifacts directly.
 

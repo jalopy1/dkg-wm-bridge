@@ -24,7 +24,7 @@
     "package": "dkg-wm-bridge",
     "version": "0.1.0",
     "binary": "wm-bridge",
-    "envRequired": ["DKG_API_URL", "DKG_AUTH_TOKEN"],
+    "envOptional": ["DKG_API_URL", "DKG_AUTH_TOKEN"],
     "usageHint": "Run 'wm-bridge init --agent <name> --framework <openclaw|hermes>' to configure, then 'wm-bridge ingest <path>' to start depositing artifacts."
   },
 
@@ -35,18 +35,25 @@
       "POST /api/assertion/{name}/write",
       "POST /api/assertion/{name}/promote",
       "POST /api/assertion/{name}/discard",
+      "POST /api/assertion/{name}/import-file",
+      "POST /api/context-graph/create"
+    ],
+    "readEndpoints": [
+      "GET /api/status",
+      "GET /api/wallets",
+      "GET /api/context-graph/list",
       "POST /api/assertion/{name}/query",
-      "POST /api/context-graph/create",
+      "POST /api/assertion/{name}/history",
       "POST /api/query"
     ],
     "credentialsHandled": [],
-    "notes": "Zero network egress beyond the local DKG node. No install scripts. No dynamic code loading. No eval. Reads DKG auth token from ~/.dkg/auth.token or DKG_AUTH_TOKEN env var (handled by the DKG installer, not listed in credentialsHandled). Write operations are limited to Working Memory assertions and Context Graph creation — no Curator-authority operations (PUBLISH/SHARE to chain) in this version."
+    "notes": "Zero network egress beyond the local DKG node. No install scripts. No dynamic code loading. No eval. Reads DKG auth token from ~/.dkg/auth.token or DKG_AUTH_TOKEN env var. Both DKG_API_URL and DKG_AUTH_TOKEN have sensible defaults and are not strictly required as env vars."
   },
 
   "trustTier": "community",
 
   "designBrief": "https://github.com/jalopy1/dkg-wm-bridge/blob/main/DESIGN.md",
   "demo": "https://github.com/jalopy1/dkg-wm-bridge/blob/main/demo.sh",
-  "promotionPath": "Artifacts enter Working Memory as 'draft' status assertions with full PROV-O provenance (agent peer ID, timestamp, source file). Status tags track maturity: draft → reviewed → promote-ready → promoted → verified-ready. The 'promote' command moves artifacts to Shared Memory via GossipSub. Deterministic URIs (urn:openclaw:wm-bridge:artifact/<hash>) remain stable through WM → SWM → VM promotion. Schema.org + PROV-O metadata is compatible with ClaimReview (the standard used by context oracles). Round 2 integration: our Context Oracle project will consume these artifacts as oracle inputs for claim verification.",
+  "promotionPath": "Artifacts enter Working Memory as 'draft' status assertions with full PROV-O provenance (agent peer ID, timestamp, source file). Status tags track maturity: draft → reviewed → promote-ready → promoted → verified-ready. The 'promote' command moves artifacts to Shared Memory via GossipSub. Deterministic URIs (urn:dkg:wm-bridge:artifact/<hash>) remain stable through WM → SWM → VM promotion. Schema.org + PROV-O metadata is compatible with ClaimReview (the standard used by context oracles). Round 2 integration: our Context Oracle project will consume these artifacts as oracle inputs for claim verification.",
   "fitNotes": "Directly implements the 'OpenClaw adapter that deposits every drafted artifact into the author's Working Memory' shape described in the bounty call Section 4. Extends to Hermes and generic agents. The agent's daily memory cycle (write notes → curate → publish findings) maps onto the WM → SWM → VM trust gradient. Multi-agent collaboration via shared Context Graphs enables the team-scratchpad pattern."
 }

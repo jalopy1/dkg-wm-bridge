@@ -12,7 +12,6 @@
 
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, basename, extname } from 'node:path';
-import { createHash } from 'node:crypto';
 import { DkgClient } from './dkg-client.js';
 import {
   provenanceQuads,
@@ -38,18 +37,17 @@ export interface IngestOptions {
   tags?: string[];
   /** Dry run — don't write, just return what would be written */
   dryRun?: boolean;
-  /** Use legacy mode (manual RDF) instead of node import pipeline */
-  legacy?: boolean;
 }
 
 export interface IngestResult {
   file: string;
   assertionName: string;
-  mode: 'import-pipeline' | 'legacy-rdf';
+  mode: 'import-pipeline';
   extractedTriples?: number;
   provenanceQuads: number;
   alreadyExists: boolean;
   skipped?: boolean;
+  provenanceWarning?: boolean;
   error?: string;
 }
 
@@ -70,13 +68,6 @@ const CONTENT_TYPES: Record<string, string> = {
 
 function detectContentType(filePath: string): string {
   return CONTENT_TYPES[extname(filePath).toLowerCase()] ?? 'application/octet-stream';
-}
-
-// -- Content hashing for deduplication ----------------------------------------
-
-function contentFingerprint(content: Buffer | string): string {
-  const buf = typeof content === 'string' ? Buffer.from(content, 'utf-8') : content;
-  return createHash('sha256').update(buf).digest('hex').slice(0, 16);
 }
 
 // -- Markdown chunking --------------------------------------------------------
@@ -174,6 +165,7 @@ export async function ingestFile(filePath: string, opts: IngestOptions): Promise
     const isLarge = content.byteLength > 8192;
 
     let extractedTriples = 0;
+    let provWarning = false;
 
     if (isMarkdown && isLarge) {
       // Chunk large markdown files and import each section
@@ -193,6 +185,10 @@ export async function ingestFile(filePath: string, opts: IngestOptions): Promise
           );
           const ext = (importResult as any).extraction;
           extractedTriples += ext?.tripleCount ?? (importResult.tripleCount as number) ?? 0;
+          // Write provenance to each chunk so they're not orphaned
+          try {
+            await opts.client.writeAssertion(opts.contextGraph, chunkName, provQuads);
+          } catch { provWarning = true; }
         } catch (err) {
           // If import-file fails (e.g. extraction not supported), fall back to raw write
           const { written } = await opts.client.writeAssertion(opts.contextGraph, chunkName, provQuads);
@@ -218,16 +214,17 @@ export async function ingestFile(filePath: string, opts: IngestOptions): Promise
     try {
       await opts.client.writeAssertion(opts.contextGraph, name, provQuads);
     } catch {
-      // Non-fatal: provenance write failure doesn't invalidate the import
+      provWarning = true;
     }
 
     return {
       file: filePath,
       assertionName: name,
-      mode: 'import-pipeline',
+      mode: 'import-pipeline' as const,
       extractedTriples,
       provenanceQuads: provQuads.length,
       alreadyExists,
+      provenanceWarning: provWarning || undefined,
     };
   } catch (err) {
     return {
@@ -281,6 +278,7 @@ export async function ingestText(
     // Import as markdown buffer
     const buf = Buffer.from(text, 'utf-8');
     let extractedTriples = 0;
+    let provWarning = false;
     try {
       const importResult = await opts.client.importFile(
         opts.contextGraph, name, buf, `${title}.md`, 'text/markdown',
@@ -296,15 +294,16 @@ export async function ingestText(
     // Add provenance on top
     try {
       await opts.client.writeAssertion(opts.contextGraph, name, provQuads);
-    } catch { /* non-fatal */ }
+    } catch { provWarning = true; }
 
     return {
       file: `inline:${title}`,
       assertionName: name,
-      mode: 'import-pipeline',
+      mode: 'import-pipeline' as const,
       extractedTriples,
       provenanceQuads: provQuads.length,
       alreadyExists,
+      provenanceWarning: provWarning || undefined,
     };
   } catch (err) {
     return {

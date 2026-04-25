@@ -77,6 +77,7 @@ Options:
   --agent <name>                Agent name for provenance (default from config)
   --framework <name>            Agent framework: openclaw, hermes, generic
   --status <tag>                Status tag: draft|reviewed|promote-ready (default: draft)
+  --kind <type>                 Artifact kind for ingest-text: memory-daily|research-note|document|... (default: knowledge-artifact)
   --tags <t1,t2,...>            Comma-separated tags
   --recursive, -r               Recurse into subdirectories
   --dry-run                     Show what would be written without writing
@@ -237,7 +238,8 @@ async function main() {
             fail++;
           } else {
             const triples = r.extractedTriples ? ` + ${r.extractedTriples} extracted` : '';
-            console.log(`✅ ${r.file} → ${r.assertionName} (${r.provenanceQuads} provenance${triples})`);
+            const warn = r.provenanceWarning ? ' ⚠️ provenance write failed' : '';
+            console.log(`✅ ${r.file} → ${r.assertionName} (${r.provenanceQuads} provenance${triples})${warn}`);
             ok++;
           }
         }
@@ -249,7 +251,8 @@ async function main() {
           process.exit(1);
         }
         const triples = result.extractedTriples ? ` + ${result.extractedTriples} extracted` : '';
-        console.log(`✅ ${result.file} → ${result.assertionName} (${result.provenanceQuads} provenance${triples})`);
+        const warn = result.provenanceWarning ? ' ⚠️ provenance write failed' : '';
+        console.log(`✅ ${result.file} → ${result.assertionName} (${result.provenanceQuads} provenance${triples})${warn}`);
       }
       break;
     }
@@ -277,7 +280,8 @@ async function main() {
         process.exit(1);
       }
       const triples = result.extractedTriples ? ` + ${result.extractedTriples} extracted` : '';
-      console.log(`✅ "${title}" → ${result.assertionName} (${result.provenanceQuads} provenance${triples})`);
+      const warn = result.provenanceWarning ? ' ⚠️ provenance write failed' : '';
+      console.log(`✅ "${title}" → ${result.assertionName} (${result.provenanceQuads} provenance${triples})${warn}`);
       break;
     }
 
