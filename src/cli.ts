@@ -211,7 +211,13 @@ async function main() {
         process.exit(1);
       }
       const target = resolve(positional[0]);
-      const stat = statSync(target);
+      let stat;
+      try {
+        stat = statSync(target);
+      } catch {
+        console.error(`❌ File not found: ${target}`);
+        process.exit(1);
+      }
       const opts = {
         client,
         contextGraph: cg,
