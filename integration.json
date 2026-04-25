@@ -21,7 +21,7 @@
 
   "install": {
     "kind": "cli",
-    "package": "@navi-agent/dkg-wm-bridge",
+    "package": "dkg-wm-bridge",
     "version": "0.1.0",
     "binary": "wm-bridge",
     "envRequired": ["DKG_API_URL", "DKG_AUTH_TOKEN"],

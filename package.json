@@ -1,5 +1,5 @@
 {
-  "name": "@navi-agent/dkg-wm-bridge",
+  "name": "dkg-wm-bridge",
   "version": "0.1.0",
   "description": "Agent-plugin that deposits workspace artifacts into DKG v10 Working Memory with structured provenance, status tags, and a promotion path to Shared and Verified Memory. Works with OpenClaw, Hermes, and any agent that produces text artifacts.",
   "type": "module",

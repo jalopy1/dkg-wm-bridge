@@ -16,7 +16,7 @@ Takes the knowledge artifacts an agent produces — daily memory logs, long-term
 ## Quick Start
 
 ```bash
-npm install -g @navi-agent/dkg-wm-bridge
+npm install -g dkg-wm-bridge
 
 # Verify DKG node connectivity
 wm-bridge check
@@ -86,7 +86,7 @@ Config is stored at `~/.dkg/wm-bridge.json`. Each agent can use its own context 
 ## Programmatic API
 
 ```typescript
-import { DkgClient, ingestFile, ensureContextGraph } from '@navi-agent/dkg-wm-bridge';
+import { DkgClient, ingestFile, ensureContextGraph } from 'dkg-wm-bridge';
 
 const client = new DkgClient();
 await ensureContextGraph(client, 'my-project', 'My Project');
