@@ -103,12 +103,12 @@ const result = await ingestFile('./notes/research.md', {
 
 ## How It Works
 
-1. Reads a markdown file from the agent's workspace
+1. Reads a file from the agent's workspace
 2. Detects artifact kind from path (daily memory, long-term memory, research note, etc.)
 3. Extracts title from first heading or filename
-4. Generates RDF quads using schema.org + PROV-O vocabulary
-5. Creates a named assertion in the target Context Graph's Working Memory
-6. Writes the quads to the assertion with the agent's DKG peer ID as provenance
+4. Imports the file via the DKG node's extraction pipeline (entities, relationships, structured knowledge)
+5. Layers provenance + status metadata on top (schema.org + PROV-O)
+6. Large files (>8KB) are chunked by `##` headings before import
 
 Artifacts can then be promoted to Shared Memory (visible to other agents on the Context Graph) and eventually to Verified Memory (on-chain, Round 2).
 

@@ -42,22 +42,21 @@ This integration directly advances the LLM-Wiki vision:
 
 ```
 ┌─────────────────────────────────────────────────┐
-│  OpenClaw Agent                          │
+│  Agent (OpenClaw / Hermes / generic)            │
 │                                                 │
 │  Workspace:                                     │
 │    memory/2026-04-25.md                         │
-│    memory/MEMORY.md                             │
-│    projects/context-oracle/...                  │
+│    projects/research/notes.md                   │
 │    session-outputs/...                          │
 │                                                 │
 │  ┌───────────────────────────────────────────┐  │
 │  │  wm-bridge CLI / programmatic API         │  │
 │  │                                           │  │
-│  │  1. Read file → extract metadata          │  │
-│  │  2. Detect kind (daily/longterm/research) │  │
-│  │  3. Generate RDF quads (schema.org+PROV)  │  │
-│  │  4. Create assertion in WM                │  │
-│  │  5. Write quads to assertion              │  │
+│  │  1. Read file → detect kind + metadata    │  │
+│  │  2. Import via node extraction pipeline   │  │
+│  │  3. Node extracts entities + structure    │  │
+│  │  4. Layer provenance + status quads       │  │
+│  │  5. Large files chunked by ## headings    │  │
 │  └─────────────┬─────────────────────────────┘  │
 │                │ HTTP API (bearer token)         │
 └────────────────┼────────────────────────────────┘
@@ -65,12 +64,12 @@ This integration directly advances the LLM-Wiki vision:
 ┌────────────────▼────────────────────────────────┐
 │  DKG v10 Node (localhost:9200)                  │
 │                                                 │
-│  Context Graph: "openclaw-artifacts"            │
+│  Context Graph: "agent-artifacts"               │
 │  ┌────────────────────────────────────────────┐ │
 │  │ Working Memory                             │ │
 │  │   assertion: wm-bridge-memory-daily-a1b2   │ │
-│  │   assertion: wm-bridge-research-note-c3d4  │ │
-│  │   assertion: wm-bridge-memory-longterm-e5  │ │
+│  │     → node-extracted entities + relations  │ │
+│  │     → provenance (PROV-O) + status tags    │ │
 │  └──────────────┬─────────────────────────────┘ │
 │                 │ promote                        │
 │  ┌──────────────▼─────────────────────────────┐ │

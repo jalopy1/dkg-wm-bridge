@@ -18,7 +18,8 @@
     "wm-bridge": "dist/cli.js"
   },
   "files": [
-    "dist",
+    "dist/**/*.js",
+    "dist/**/*.d.ts",
     "SKILL.md",
     "README.md",
     "LICENSE"
