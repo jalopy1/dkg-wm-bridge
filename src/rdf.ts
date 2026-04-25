@@ -46,17 +46,23 @@ export interface ArtifactMeta {
 
 // -- Helpers ------------------------------------------------------------------
 
-function contentHash(text: string): string {
+/** Hash source path + timestamp for deterministic artifact identification. */
+function sourceHash(text: string): string {
   return createHash('sha256').update(text, 'utf-8').digest('hex').slice(0, 16);
 }
 
 function artifactUri(meta: ArtifactMeta): string {
-  const hash = contentHash(`${meta.source}:${meta.timestamp}`);
+  const hash = sourceHash(`${meta.source}:${meta.timestamp}`);
   return `${WMB}artifact/${hash}`;
 }
 
 function literal(value: string, datatype?: string): string {
-  const escaped = value.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n');
+  const escaped = value
+    .replace(/\\/g, '\\\\')
+    .replace(/"/g, '\\"')
+    .replace(/\n/g, '\\n')
+    .replace(/\r/g, '\\r')
+    .replace(/\t/g, '\\t');
   if (datatype) return `"${escaped}"^^<${datatype}>`;
   return `"${escaped}"`;
 }
@@ -118,7 +124,7 @@ export function artifactToQuads(meta: ArtifactMeta): Quad[] {
  * Keeps assertions organized and idempotent.
  */
 export function assertionName(meta: ArtifactMeta): string {
-  const hash = contentHash(`${meta.source}:${meta.timestamp}`);
+  const hash = sourceHash(`${meta.source}:${meta.timestamp}`);
   return `wm-bridge-${meta.kind}-${hash}`;
 }
 
@@ -143,4 +149,4 @@ export function detectKind(filePath: string): ArtifactMeta['kind'] {
   return 'document';
 }
 
-export { artifactUri, contentHash, WMB, WMBO, SCHEMA };
+export { artifactUri, sourceHash, WMB, WMBO, SCHEMA };

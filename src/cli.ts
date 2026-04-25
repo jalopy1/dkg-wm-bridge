@@ -140,6 +140,18 @@ async function main() {
   const framework = (flags.framework as string) || config.framework || 'generic';
   const tags = flags.tags ? (flags.tags as string).split(',').map(t => t.trim()) : undefined;
 
+  // Validate flag values
+  const validStatuses = ['draft', 'reviewed', 'promote-ready', 'promoted', 'verified-ready'];
+  const validFrameworks = ['openclaw', 'hermes', 'generic'];
+  if (flags.status && !validStatuses.includes(flags.status as string)) {
+    console.error(`Invalid --status "${flags.status}". Must be one of: ${validStatuses.join(', ')}`);
+    process.exit(1);
+  }
+  if (flags.framework && !validFrameworks.includes(flags.framework as string)) {
+    console.error(`Invalid --framework "${flags.framework}". Must be one of: ${validFrameworks.join(', ')}`);
+    process.exit(1);
+  }
+
   switch (command) {
     // -- check ----------------------------------------------------------------
     case 'check': {

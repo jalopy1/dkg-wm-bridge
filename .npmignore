@@ -4,3 +4,4 @@ tsconfig.json
 .gitignore
 demo.sh
 integration.json
+*.map

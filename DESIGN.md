@@ -125,6 +125,6 @@ No terminology deviations.
 
 ## 10. Maintenance
 
-- **Maintainer:** @Lyvner (J) + Navi (AI agent co-maintainer)
+- **Maintainer:** @jalopy1 + Navi (AI agent co-maintainer)
 - **Support window:** 6 months post-acceptance, with intent to extend through Rounds 2 and 3
 - **Update path:** Registry entry bumps via small PRs (new commit SHA + version)

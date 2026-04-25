@@ -4,6 +4,15 @@
   "description": "Agent-plugin that deposits workspace artifacts into DKG v10 Working Memory with structured provenance, status tags, and a promotion path to Shared and Verified Memory. Works with OpenClaw, Hermes, and any agent that produces text artifacts.",
   "type": "module",
   "license": "Apache-2.0",
+  "author": "jalopy1",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jalopy1/dkg-wm-bridge.git"
+  },
+  "homepage": "https://github.com/jalopy1/dkg-wm-bridge",
+  "bugs": {
+    "url": "https://github.com/jalopy1/dkg-wm-bridge/issues"
+  },
   "main": "dist/index.js",
   "bin": {
     "wm-bridge": "dist/cli.js"
@@ -16,6 +25,7 @@
   ],
   "scripts": {
     "build": "tsc",
+    "pretest": "tsc",
     "test": "node --test test/*.test.js",
     "clean": "rm -rf dist"
   },

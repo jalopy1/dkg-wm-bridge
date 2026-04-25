@@ -45,8 +45,8 @@
 
   "trustTier": "community",
 
-  "designBrief": "https://github.com/Lyvner/dkg-wm-bridge/blob/main/DESIGN.md",
-  "demo": "https://github.com/Lyvner/dkg-wm-bridge/blob/main/DEMO.md",
+  "designBrief": "https://github.com/jalopy1/dkg-wm-bridge/blob/main/DESIGN.md",
+  "demo": "https://github.com/jalopy1/dkg-wm-bridge/blob/main/demo.sh",
   "promotionPath": "Artifacts enter Working Memory as 'draft' status assertions with full PROV-O provenance (agent peer ID, timestamp, source file). Status tags track maturity: draft → reviewed → promote-ready → promoted → verified-ready. The 'promote' command moves artifacts to Shared Memory via GossipSub. Deterministic URIs (urn:openclaw:wm-bridge:artifact/<hash>) remain stable through WM → SWM → VM promotion. Schema.org + PROV-O metadata is compatible with ClaimReview (the standard used by context oracles). Round 2 integration: our Context Oracle project will consume these artifacts as oracle inputs for claim verification.",
   "fitNotes": "Directly implements the 'OpenClaw adapter that deposits every drafted artifact into the author's Working Memory' shape described in the bounty call Section 4. Extends to Hermes and generic agents. The agent's daily memory cycle (write notes → curate → publish findings) maps onto the WM → SWM → VM trust gradient. Multi-agent collaboration via shared Context Graphs enables the team-scratchpad pattern."
 }
