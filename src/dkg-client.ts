@@ -40,7 +40,10 @@ export class DkgClient {
       if (!token) throw new Error('auth.token file is empty or contains only comments');
       return token;
     } catch (err) {
-      if (err instanceof Error && err.message.includes('auth.token')) throw err;
+      if (err instanceof Error && 'code' in err && (err as NodeJS.ErrnoException).code === 'ENOENT') {
+        throw new Error(`Auth token file not found at ~/.dkg/auth.token. Set DKG_AUTH_TOKEN or create the file.`);
+      }
+      if (err instanceof Error) throw err;
       throw new Error('No DKG auth token found. Set DKG_AUTH_TOKEN or ensure ~/.dkg/auth.token exists.');
     }
   }

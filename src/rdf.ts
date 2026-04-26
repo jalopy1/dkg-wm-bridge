@@ -46,6 +46,10 @@ export interface ArtifactMeta {
   status: ArtifactStatus;
   /** Optional tags for categorization */
   tags?: string[];
+  /** MIME content type (default: text/markdown) */
+  contentType?: string;
+  /** Agent's wallet address for on-chain identity */
+  agentAddress?: string;
 }
 
 // -- Helpers ------------------------------------------------------------------
@@ -101,7 +105,11 @@ export function provenanceQuads(meta: ArtifactMeta): Quad[] {
   q(uri, `${SCHEMA}name`, literal(meta.title));
   q(uri, `${SCHEMA}dateCreated`, dateLiteral(meta.timestamp));
   q(uri, `${SCHEMA}author`, agent);
-  q(uri, `${SCHEMA}encodingFormat`, literal('text/markdown'));
+  q(uri, `${SCHEMA}encodingFormat`, literal(meta.contentType ?? 'text/markdown'));
+
+  // -- Content integrity hash
+  const contentHash = createHash('sha256').update(meta.content, 'utf-8').digest('hex');
+  q(uri, `${SCHEMA}sha256`, literal(contentHash));
 
   // -- Provenance (PROV-O + DC Terms)
   q(uri, `${PROV}wasGeneratedBy`, agent);
@@ -123,6 +131,9 @@ export function provenanceQuads(meta: ArtifactMeta): Quad[] {
   // -- Agent identity
   q(agent, `${RDF}type`, `${PROV}SoftwareAgent`);
   q(agent, `${SCHEMA}name`, literal(meta.agent));
+  if (meta.agentAddress) {
+    q(agent, `${SCHEMA}identifier`, literal(meta.agentAddress));
+  }
 
   return quads;
 }

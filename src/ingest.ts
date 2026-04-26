@@ -247,6 +247,12 @@ export async function ingestText(
   kind: ArtifactMeta['kind'],
   opts: IngestOptions,
 ): Promise<IngestResult> {
+  // Fetch agent wallet address for provenance
+  let agentAddress: string | undefined;
+  try {
+    agentAddress = await opts.client.getAgentAddress();
+  } catch { /* wallet lookup is best-effort */ }
+
   const meta: ArtifactMeta = {
     source: `inline:${title}`,
     title,
@@ -257,6 +263,7 @@ export async function ingestText(
     agentPeerId: opts.agentPeerId,
     status: opts.status ?? 'draft',
     tags: opts.tags,
+    agentAddress,
   };
 
   const name = assertionName(meta);

@@ -16,7 +16,7 @@
     "contact": "Telegram: @Lyvner"
   },
   "repo": "https://github.com/jalopy1/dkg-wm-bridge",
-  "commit": "a6b34443f9b93f070ca5e56efac43c9ba2af5320",
+  "commit": "4ec879e1f25e89b5ac4c2f4fb9fb2759d140a17b",
   "license": "Apache-2.0",
   "requiresDkgNodeVersion": ">=10.0.0",
   "memoryLayers": [
@@ -41,12 +41,8 @@
   "install": {
     "kind": "cli",
     "package": "dkg-wm-bridge",
-    "version": "0.1.1",
+    "version": "0.1.2",
     "binary": "wm-bridge",
-    "envOptional": [
-      "DKG_API_URL",
-      "DKG_AUTH_TOKEN"
-    ],
     "usageHint": "Run 'wm-bridge init --agent <name> --framework <openclaw|hermes>' to configure, then 'wm-bridge ingest <path>' to start depositing artifacts."
   },
   "security": {
@@ -72,7 +68,7 @@
   },
   "trustTier": "community",
   "designBrief": "https://github.com/jalopy1/dkg-wm-bridge/blob/main/DESIGN.md",
-  "demo": "https://github.com/jalopy1/dkg-wm-bridge/blob/main/demo.sh",
+  "demo": "https://asciinema.org/a/719893",
   "promotionPath": "Artifacts enter Working Memory as 'draft' status assertions with full PROV-O provenance (agent peer ID, timestamp, source file). Status tags track maturity: draft → reviewed → promote-ready → promoted → verified-ready. The 'promote' command moves artifacts to Shared Memory via GossipSub. Deterministic URIs (urn:dkg:wm-bridge:artifact/<hash>) remain stable through WM → SWM → VM promotion. Schema.org + PROV-O metadata is compatible with ClaimReview (the standard used by context oracles). Round 2 integration: our Context Oracle project will consume these artifacts as oracle inputs for claim verification.",
   "fitNotes": "Directly implements the 'OpenClaw adapter that deposits every drafted artifact into the author's Working Memory' shape described in the bounty call Section 4. Extends to Hermes and generic agents. The agent's daily memory cycle (write notes → curate → publish findings) maps onto the WM → SWM → VM trust gradient. Multi-agent collaboration via shared Context Graphs enables the team-scratchpad pattern."
 }

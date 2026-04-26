@@ -27,6 +27,7 @@ import {
   listWorkingMemory,
   ensureContextGraph,
 } from './ingest.js';
+import { WMBO } from './rdf.js';
 
 // -- Config -------------------------------------------------------------------
 
@@ -293,6 +294,25 @@ async function main() {
       }
       const result = await promoteArtifact(client, cg, positional[0]);
       const count = (result as any).promotedCount ?? '?';
+
+      // Update the assertion's status tag to "promoted"
+      try {
+        const { quads: existingQuads } = await client.queryAssertion(cg, positional[0]);
+        const statusPred = `${WMBO}status`;
+        const artifactSubject = (existingQuads as any[])?.find(
+          (q: any) => q.predicate === statusPred,
+        )?.subject;
+        if (artifactSubject) {
+          await client.writeAssertion(cg, positional[0], [{
+            subject: artifactSubject,
+            predicate: statusPred,
+            object: `"promoted"`,
+          }]);
+        }
+      } catch {
+        // Status update is best-effort; promotion itself already succeeded
+      }
+
       console.log(`✅ Promoted "${positional[0]}" → Shared Memory (${count} quads)`);
       break;
     }
