@@ -4,7 +4,12 @@
   "slug": "dkg-wm-bridge",
   "name": "DKG Working Memory Bridge",
   "description": "Agent-plugin that deposits workspace artifacts (memory files, research notes, session outputs) into DKG v10 Working Memory with schema.org provenance and status tags, and promotes them to Shared Memory. Works with OpenClaw, Hermes, and comparable agents.",
-  "category": ["ingestion", "working-memory", "agent-plugin", "provenance"],
+  "category": [
+    "ingestion",
+    "working-memory",
+    "agent-plugin",
+    "provenance"
+  ],
   "maintainer": {
     "github": "@jalopy1",
     "name": "Lyvn",
@@ -14,20 +19,36 @@
   "commit": "a6b34443f9b93f070ca5e56efac43c9ba2af5320",
   "license": "Apache-2.0",
   "requiresDkgNodeVersion": ">=10.0.0",
-  "memoryLayers": ["WM", "SWM"],
-  "v10PrimitivesUsed": ["ContextGraph", "Assertion", "Entity", "UAL"],
-  "publicInterfacesUsed": ["http-api"],
-  "targetAgents": ["OpenClaw", "Hermes", "generic-CLI", "generic-HTTP"],
-
+  "memoryLayers": [
+    "WM",
+    "SWM"
+  ],
+  "v10PrimitivesUsed": [
+    "ContextGraph",
+    "Assertion",
+    "Entity",
+    "UAL"
+  ],
+  "publicInterfacesUsed": [
+    "http-api"
+  ],
+  "targetAgents": [
+    "OpenClaw",
+    "Hermes",
+    "generic-CLI",
+    "generic-HTTP"
+  ],
   "install": {
     "kind": "cli",
     "package": "dkg-wm-bridge",
-    "version": "0.1.0",
+    "version": "0.1.1",
     "binary": "wm-bridge",
-    "envOptional": ["DKG_API_URL", "DKG_AUTH_TOKEN"],
+    "envOptional": [
+      "DKG_API_URL",
+      "DKG_AUTH_TOKEN"
+    ],
     "usageHint": "Run 'wm-bridge init --agent <name> --framework <openclaw|hermes>' to configure, then 'wm-bridge ingest <path>' to start depositing artifacts."
   },
-
   "security": {
     "networkEgress": [],
     "writeAuthority": [
@@ -49,9 +70,7 @@
     "credentialsHandled": [],
     "notes": "Zero network egress beyond the local DKG node. No install scripts. No dynamic code loading. No eval. Reads DKG auth token from ~/.dkg/auth.token or DKG_AUTH_TOKEN env var. Both DKG_API_URL and DKG_AUTH_TOKEN have sensible defaults and are not strictly required as env vars."
   },
-
   "trustTier": "community",
-
   "designBrief": "https://github.com/jalopy1/dkg-wm-bridge/blob/main/DESIGN.md",
   "demo": "https://github.com/jalopy1/dkg-wm-bridge/blob/main/demo.sh",
   "promotionPath": "Artifacts enter Working Memory as 'draft' status assertions with full PROV-O provenance (agent peer ID, timestamp, source file). Status tags track maturity: draft → reviewed → promote-ready → promoted → verified-ready. The 'promote' command moves artifacts to Shared Memory via GossipSub. Deterministic URIs (urn:dkg:wm-bridge:artifact/<hash>) remain stable through WM → SWM → VM promotion. Schema.org + PROV-O metadata is compatible with ClaimReview (the standard used by context oracles). Round 2 integration: our Context Oracle project will consume these artifacts as oracle inputs for claim verification.",
