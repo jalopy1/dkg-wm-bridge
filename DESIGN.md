@@ -179,7 +179,7 @@ All ingest and promote operations are logged to `~/.dkg/audit.log` with:
   └─────────────────────────────────────────────────────────┘
 ```
 
-## 10. Security Considerations (updated in 0.1.3)
+## 10. Security Considerations (updated in 0.1.5)
 
 - **Network egress:** None beyond the local DKG node (`127.0.0.1:9200`).
 - **Write authority:** `POST /api/assertion/create`, `POST /api/assertion/:name/write`, `POST /api/assertion/:name/promote`. No Curator-authority operations (PUBLISH/SHARE to chain) in Round 1.

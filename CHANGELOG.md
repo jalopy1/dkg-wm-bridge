@@ -2,6 +2,15 @@
 
 All notable changes to dkg-wm-bridge are documented here.
 
+## [0.1.5] — 2026-04-27
+
+### Changed
+- Refactored cli.ts: extracted 9 command handlers from monolithic switch statement
+- Query result deduplication (multi-tag artifacts no longer produce duplicate rows)
+- Narrowed scanner api-key pattern to reduce false positives on normal prose
+- Added env-secret pattern for ENV_VAR=value style credential detection
+- Added CHANGELOG.md
+
 ## [0.1.4] — 2026-04-27
 
 ### Added
