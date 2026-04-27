@@ -113,7 +113,73 @@ All v10 vocabulary is used as defined:
 
 No terminology deviations.
 
-## 9. Security Considerations
+## 9. Data Classification Protocol
+
+The bridge enforces a "classify at ingestion, guard at promotion" principle to prevent accidental exposure of sensitive content through the trust gradient.
+
+### Sensitivity Levels
+
+Every artifact carries a `wmbo:sensitivity` triple in its provenance quads:
+
+| Level | Description | Promotable? |
+|-------|-------------|-------------|
+| `public` | Safe for anyone | Yes |
+| `shareable` | OK for team (default) | Yes |
+| `personal` | Contains PII | No |
+| `secret` | Contains credentials/keys | No |
+
+### Automatic PII/Secret Scanning
+
+The `--scan` flag invokes `src/scanner.ts` before ingestion:
+
+- **Secrets detected** (API keys, tokens, SSH keys) → ingestion blocked entirely
+- **PII detected** (emails, IPs, home paths) → auto-classified as `personal`
+- **Clean content** → proceeds with the specified or default sensitivity
+
+The scanner provides `scanContent()` for detection and `redactContent()` for replacing matches with `[REDACTED]`.
+
+### Promotion Guards
+
+The `promote` command checks `wmbo:sensitivity` before proceeding:
+
+- `public` or `shareable` → promotion allowed
+- `personal` or `secret` → promotion refused with an error explaining why
+
+This ensures sensitive content stays in Working Memory on the operator's own node and never reaches Shared Memory or the broader network.
+
+### Audit Logging
+
+All ingest and promote operations are logged to `~/.dkg/audit.log` with:
+
+- Timestamp
+- Operation (ingest/promote/discard)
+- Artifact name and sensitivity level
+- Scan results (if `--scan` was used)
+- Success/failure status
+
+### Trust Gradient with Sensitivity
+
+```
+  ┌─────────────────────────────────────────────────────────┐
+  │  Working Memory (private, per-agent)                    │
+  │    sensitivity: public | shareable | personal | secret  │
+  │    status: draft → reviewed → promote-ready             │
+  └──────────────┬──────────────────────────────────────────┘
+                 │ promote (blocked if personal/secret)
+  ┌──────────────▼──────────────────────────────────────────┐
+  │  Shared Memory (GossipSub, team-visible)                │
+  │    sensitivity: public | shareable only                 │
+  │    status: promoted                                     │
+  └──────────────┬──────────────────────────────────────────┘
+                 │ publish (future: Round 2)
+  ┌──────────────▼──────────────────────────────────────────┐
+  │  Verified Memory (on-chain)                             │
+  │    sensitivity: public | shareable only                 │
+  │    status: verified-ready → verified                    │
+  └─────────────────────────────────────────────────────────┘
+```
+
+## 10. Security Considerations (updated in 0.1.3)
 
 - **Network egress:** None beyond the local DKG node (`127.0.0.1:9200`).
 - **Write authority:** `POST /api/assertion/create`, `POST /api/assertion/:name/write`, `POST /api/assertion/:name/promote`. No Curator-authority operations (PUBLISH/SHARE to chain) in Round 1.
@@ -122,7 +188,7 @@ No terminology deviations.
 - **No dynamic code loading.** No eval, no remote module fetch.
 - **Content sensitivity:** Artifacts may contain agent memory (personal context). All storage is local Working Memory on the operator's own node — nothing leaves the machine unless explicitly promoted to Shared Memory.
 
-## 10. Maintenance
+## 11. Maintenance
 
 - **Maintainer:** @jalopy1
 - **Support window:** 6 months post-acceptance, with intent to extend through Rounds 2 and 3

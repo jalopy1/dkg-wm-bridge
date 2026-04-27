@@ -16,7 +16,7 @@
  */
 
 import { resolve, dirname } from 'node:path';
-import { statSync, readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
+import { statSync, readFileSync, writeFileSync, existsSync, mkdirSync, appendFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { DkgClient } from './dkg-client.js';
 import {
@@ -27,7 +27,7 @@ import {
   listWorkingMemory,
   ensureContextGraph,
 } from './ingest.js';
-import { WMBO } from './rdf.js';
+import { WMBO, type SensitivityLevel } from './rdf.js';
 
 // -- Config -------------------------------------------------------------------
 
@@ -40,6 +40,7 @@ interface BridgeConfig {
 }
 
 const CONFIG_PATH = resolve(homedir(), '.dkg', 'wm-bridge.json');
+const AUDIT_LOG_PATH = resolve(homedir(), '.dkg', 'audit.log');
 
 function loadConfig(): Partial<BridgeConfig> {
   try {
@@ -54,6 +55,16 @@ function saveConfig(cfg: BridgeConfig): void {
   const dir = dirname(CONFIG_PATH);
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
   writeFileSync(CONFIG_PATH, JSON.stringify(cfg, null, 2) + '\n');
+}
+
+/** Append an entry to the audit log. */
+function auditLog(action: string, name: string, sensitivity: string, result: string): void {
+  const dir = dirname(AUDIT_LOG_PATH);
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+  const ts = new Date().toISOString();
+  // Sanitize inputs to prevent log injection (strip tabs, newlines, control chars)
+  const clean = (s: string) => s.replace(/[\t\n\r\x00-\x1f]/g, ' ').slice(0, 200);
+  appendFileSync(AUDIT_LOG_PATH, `${ts}\t${clean(action)}\t${clean(name)}\t${clean(sensitivity)}\t${clean(result)}\n`);
 }
 
 // -- CLI ----------------------------------------------------------------------
@@ -78,6 +89,8 @@ Options:
   --agent <name>                Agent name for provenance (default from config)
   --framework <name>            Agent framework: openclaw, hermes, generic
   --status <tag>                Status tag: draft|reviewed|promote-ready (default: draft)
+  --sensitivity <level>         Sensitivity level: public|shareable|personal|secret
+  --scan                        Run PII/secret scanner before ingesting
   --kind <type>                 Artifact kind for ingest-text: memory-daily|research-note|document|... (default: knowledge-artifact)
   --tags <t1,t2,...>            Comma-separated tags
   --recursive, -r               Recurse into subdirectories
@@ -104,10 +117,12 @@ function parseArgs(argv: string[]): { command: string; positional: string[]; fla
     if (arg === '--help' || arg === '-h') { flags.help = true; continue; }
     if (arg === '--dry-run') { flags.dryRun = true; continue; }
     if (arg === '--recursive' || arg === '-r') { flags.recursive = true; continue; }
+    if (arg === '--scan') { flags.scan = true; continue; }
     if ((arg === '--context-graph' || arg === '-c') && argv[i + 1]) { flags.contextGraph = argv[++i]; continue; }
     if (arg === '--agent' && argv[i + 1]) { flags.agent = argv[++i]; continue; }
     if (arg === '--framework' && argv[i + 1]) { flags.framework = argv[++i]; continue; }
     if (arg === '--status' && argv[i + 1]) { flags.status = argv[++i]; continue; }
+    if (arg === '--sensitivity' && argv[i + 1]) { flags.sensitivity = argv[++i]; continue; }
     if (arg === '--tags' && argv[i + 1]) { flags.tags = argv[++i]; continue; }
     if (arg === '--kind' && argv[i + 1]) { flags.kind = argv[++i]; continue; }
     if (!arg.startsWith('-')) positional.push(arg);
@@ -151,6 +166,11 @@ async function main() {
   }
   if (flags.framework && !validFrameworks.includes(flags.framework as string)) {
     console.error(`Invalid --framework "${flags.framework}". Must be one of: ${validFrameworks.join(', ')}`);
+    process.exit(1);
+  }
+  const validSensitivities: SensitivityLevel[] = ['public', 'shareable', 'personal', 'secret'];
+  if (flags.sensitivity && !validSensitivities.includes(flags.sensitivity as SensitivityLevel)) {
+    console.error(`Invalid --sensitivity "${flags.sensitivity}". Must be one of: ${validSensitivities.join(', ')}`);
     process.exit(1);
   }
 
@@ -228,6 +248,8 @@ async function main() {
         status: (flags.status as any) || 'draft',
         tags,
         dryRun: !!flags.dryRun,
+        sensitivity: flags.sensitivity as SensitivityLevel | undefined,
+        scan: !!flags.scan,
       };
 
       if (stat.isDirectory()) {
@@ -236,11 +258,14 @@ async function main() {
         for (const r of results) {
           if (r.error) {
             console.log(`❌ ${r.file} — ${r.error}`);
+            auditLog('ingest', r.assertionName || r.file, flags.sensitivity as string ?? 'shareable', `error: ${r.error}`);
             fail++;
           } else {
             const triples = r.extractedTriples ? ` + ${r.extractedTriples} extracted` : '';
             const warn = r.provenanceWarning ? ' ⚠️ provenance write failed' : '';
-            console.log(`✅ ${r.file} → ${r.assertionName} (${r.provenanceQuads} provenance${triples})${warn}`);
+            const scanInfo = r.scanResult?.findings.length ? ` [scan: ${r.scanResult.findings.length} finding(s)]` : '';
+            console.log(`✅ ${r.file} → ${r.assertionName} (${r.provenanceQuads} provenance${triples})${warn}${scanInfo}`);
+            auditLog('ingest', r.assertionName, flags.sensitivity as string ?? r.scanResult?.recommendedSensitivity ?? 'shareable', 'ok');
             ok++;
           }
         }
@@ -249,11 +274,14 @@ async function main() {
         const result = await ingestFile(target, opts);
         if (result.error) {
           console.error(`❌ ${result.file} — ${result.error}`);
+          auditLog('ingest', result.assertionName || result.file, flags.sensitivity as string ?? 'shareable', `error: ${result.error}`);
           process.exit(1);
         }
         const triples = result.extractedTriples ? ` + ${result.extractedTriples} extracted` : '';
         const warn = result.provenanceWarning ? ' ⚠️ provenance write failed' : '';
-        console.log(`✅ ${result.file} → ${result.assertionName} (${result.provenanceQuads} provenance${triples})${warn}`);
+        const scanInfo = result.scanResult?.findings.length ? ` [scan: ${result.scanResult.findings.length} finding(s)]` : '';
+        console.log(`✅ ${result.file} → ${result.assertionName} (${result.provenanceQuads} provenance${triples})${warn}${scanInfo}`);
+        auditLog('ingest', result.assertionName, flags.sensitivity as string ?? result.scanResult?.recommendedSensitivity ?? 'shareable', 'ok');
       }
       break;
     }
@@ -275,14 +303,19 @@ async function main() {
         status: (flags.status as any) || 'draft',
         tags,
         dryRun: !!flags.dryRun,
+        sensitivity: flags.sensitivity as SensitivityLevel | undefined,
+        scan: !!flags.scan,
       });
       if (result.error) {
         console.error(`❌ ${result.error}`);
+        auditLog('ingest-text', result.assertionName || title, flags.sensitivity as string ?? 'shareable', `error: ${result.error}`);
         process.exit(1);
       }
       const triples = result.extractedTriples ? ` + ${result.extractedTriples} extracted` : '';
       const warn = result.provenanceWarning ? ' ⚠️ provenance write failed' : '';
-      console.log(`✅ "${title}" → ${result.assertionName} (${result.provenanceQuads} provenance${triples})${warn}`);
+      const scanInfo = result.scanResult?.findings.length ? ` [scan: ${result.scanResult.findings.length} finding(s)]` : '';
+      console.log(`✅ "${title}" → ${result.assertionName} (${result.provenanceQuads} provenance${triples})${warn}${scanInfo}`);
+      auditLog('ingest-text', result.assertionName, flags.sensitivity as string ?? result.scanResult?.recommendedSensitivity ?? 'shareable', 'ok');
       break;
     }
 
@@ -292,6 +325,28 @@ async function main() {
         console.error('Usage: wm-bridge promote <assertion-name>');
         process.exit(1);
       }
+
+      // Check sensitivity before promoting
+      try {
+        const { quads: checkQuads } = await client.queryAssertion(cg, positional[0]);
+        const sensitivityPred = `${WMBO}sensitivity`;
+        const sensitivityQuad = (checkQuads as any[])?.find(
+          (q: any) => q.predicate === sensitivityPred,
+        );
+        if (sensitivityQuad) {
+          const sensValue = cleanLiteral(sensitivityQuad.object);
+          if (sensValue === 'personal' || sensValue === 'secret') {
+            const msg = `🚫 Cannot promote "${positional[0]}" — sensitivity is "${sensValue}". Only "public" or "shareable" artifacts can be promoted to Shared Memory.`;
+            console.error(msg);
+            auditLog('promote', positional[0], sensValue, 'blocked');
+            process.exit(1);
+          }
+        }
+      } catch {
+        console.warn('⚠️  Could not verify sensitivity tag — proceeding with caution');
+        auditLog('promote', positional[0], 'unknown', 'sensitivity-check-failed');
+      }
+
       const result = await promoteArtifact(client, cg, positional[0]);
       const count = (result as any).promotedCount ?? '?';
 
@@ -314,6 +369,7 @@ async function main() {
       }
 
       console.log(`✅ Promoted "${positional[0]}" → Shared Memory (${count} quads)`);
+      auditLog('promote', positional[0], 'shareable', 'ok');
       break;
     }
 

@@ -7,6 +7,7 @@ export {
   detectKind,
   type ArtifactMeta,
   type ArtifactStatus,
+  type SensitivityLevel,
 } from './rdf.js';
 export {
   ingestFile,
@@ -18,3 +19,9 @@ export {
   type IngestOptions,
   type IngestResult,
 } from './ingest.js';
+export {
+  scanContent,
+  redactContent,
+  type ScanResult,
+  type ScanFinding,
+} from './scanner.js';

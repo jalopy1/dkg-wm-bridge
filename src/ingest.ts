@@ -20,7 +20,9 @@ import {
   detectKind,
   type ArtifactMeta,
   type ArtifactStatus,
+  type SensitivityLevel,
 } from './rdf.js';
+import { scanContent, type ScanResult } from './scanner.js';
 
 export interface IngestOptions {
   /** DKG client instance */
@@ -37,6 +39,10 @@ export interface IngestOptions {
   tags?: string[];
   /** Dry run — don't write, just return what would be written */
   dryRun?: boolean;
+  /** Sensitivity level override */
+  sensitivity?: SensitivityLevel;
+  /** Run PII/secret scanner before ingesting */
+  scan?: boolean;
 }
 
 export interface IngestResult {
@@ -49,6 +55,7 @@ export interface IngestResult {
   skipped?: boolean;
   provenanceWarning?: boolean;
   error?: string;
+  scanResult?: ScanResult;
 }
 
 // -- Content type detection ---------------------------------------------------
@@ -131,6 +138,30 @@ export async function ingestFile(filePath: string, opts: IngestOptions): Promise
   const stat = statSync(filePath);
   const contentType = detectContentType(filePath);
 
+  // -- Scan for PII/secrets if requested
+  let scanResult: ScanResult | undefined;
+  let effectiveSensitivity = opts.sensitivity;
+
+  if (opts.scan) {
+    scanResult = scanContent(textContent);
+
+    if (scanResult.hasSecrets) {
+      return {
+        file: filePath,
+        assertionName: '',
+        mode: 'import-pipeline',
+        provenanceQuads: 0,
+        alreadyExists: false,
+        error: `Secrets detected — refusing to ingest. ${scanResult.findings.filter(f => f.type === 'secret').length} secret(s) found. Remove secrets before ingesting.`,
+        scanResult,
+      };
+    }
+
+    if (scanResult.hasPII && !opts.sensitivity) {
+      effectiveSensitivity = 'personal';
+    }
+  }
+
   const meta: ArtifactMeta = {
     source: filePath,
     title: extractTitle(textContent, fileName),
@@ -141,6 +172,7 @@ export async function ingestFile(filePath: string, opts: IngestOptions): Promise
     agentPeerId: opts.agentPeerId,
     status: opts.status ?? 'draft',
     tags: opts.tags,
+    sensitivity: effectiveSensitivity,
   };
 
   const name = assertionName(meta);
@@ -153,6 +185,7 @@ export async function ingestFile(filePath: string, opts: IngestOptions): Promise
       mode: 'import-pipeline',
       provenanceQuads: provQuads.length,
       alreadyExists: false,
+      scanResult,
     };
   }
 
@@ -225,6 +258,7 @@ export async function ingestFile(filePath: string, opts: IngestOptions): Promise
       provenanceQuads: provQuads.length,
       alreadyExists,
       provenanceWarning: provWarning || undefined,
+      scanResult,
     };
   } catch (err) {
     return {
@@ -234,6 +268,7 @@ export async function ingestFile(filePath: string, opts: IngestOptions): Promise
       provenanceQuads: provQuads.length,
       alreadyExists: false,
       error: err instanceof Error ? err.message : String(err),
+      scanResult,
     };
   }
 }
@@ -247,6 +282,30 @@ export async function ingestText(
   kind: ArtifactMeta['kind'],
   opts: IngestOptions,
 ): Promise<IngestResult> {
+  // -- Scan for PII/secrets if requested
+  let scanResult: ScanResult | undefined;
+  let effectiveSensitivity = opts.sensitivity;
+
+  if (opts.scan) {
+    scanResult = scanContent(text);
+
+    if (scanResult.hasSecrets) {
+      return {
+        file: `inline:${title}`,
+        assertionName: '',
+        mode: 'import-pipeline',
+        provenanceQuads: 0,
+        alreadyExists: false,
+        error: `Secrets detected — refusing to ingest. ${scanResult.findings.filter(f => f.type === 'secret').length} secret(s) found. Remove secrets before ingesting.`,
+        scanResult,
+      };
+    }
+
+    if (scanResult.hasPII && !opts.sensitivity) {
+      effectiveSensitivity = 'personal';
+    }
+  }
+
   // Fetch agent wallet address for provenance
   let agentAddress: string | undefined;
   try {
@@ -264,6 +323,7 @@ export async function ingestText(
     status: opts.status ?? 'draft',
     tags: opts.tags,
     agentAddress,
+    sensitivity: effectiveSensitivity,
   };
 
   const name = assertionName(meta);
@@ -276,6 +336,7 @@ export async function ingestText(
       mode: 'import-pipeline',
       provenanceQuads: provQuads.length,
       alreadyExists: false,
+      scanResult,
     };
   }
 
@@ -311,6 +372,7 @@ export async function ingestText(
       provenanceQuads: provQuads.length,
       alreadyExists,
       provenanceWarning: provWarning || undefined,
+      scanResult,
     };
   } catch (err) {
     return {
@@ -320,6 +382,7 @@ export async function ingestText(
       provenanceQuads: provQuads.length,
       alreadyExists: false,
       error: err instanceof Error ? err.message : String(err),
+      scanResult,
     };
   }
 }

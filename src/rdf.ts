@@ -25,6 +25,10 @@ const WMBO = `${WMB}ontology/`;
 
 export type ArtifactStatus = 'draft' | 'reviewed' | 'promote-ready' | 'promoted' | 'verified-ready';
 
+// -- Sensitivity levels -------------------------------------------------------
+
+export type SensitivityLevel = 'public' | 'shareable' | 'personal' | 'secret';
+
 // -- Artifact metadata --------------------------------------------------------
 
 export interface ArtifactMeta {
@@ -50,6 +54,8 @@ export interface ArtifactMeta {
   contentType?: string;
   /** Agent's wallet address for on-chain identity */
   agentAddress?: string;
+  /** Sensitivity level for access control (default: shareable) */
+  sensitivity?: SensitivityLevel;
 }
 
 // -- Helpers ------------------------------------------------------------------
@@ -116,9 +122,10 @@ export function provenanceQuads(meta: ArtifactMeta): Quad[] {
   q(uri, `${PROV}generatedAtTime`, dateLiteral(meta.timestamp));
   q(uri, `${DCTERMS}source`, literal(meta.source));
 
-  // -- WM Bridge ontology (status, kind)
+  // -- WM Bridge ontology (status, kind, sensitivity)
   q(uri, `${WMBO}artifactKind`, literal(meta.kind));
   q(uri, `${WMBO}status`, literal(meta.status));
+  q(uri, `${WMBO}sensitivity`, literal(meta.sensitivity ?? 'shareable'));
   q(uri, `${WMBO}sourceFile`, literal(meta.source));
 
   // -- Tags

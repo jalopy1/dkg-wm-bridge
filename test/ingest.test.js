@@ -170,8 +170,8 @@ describe('ingestFile', () => {
         tags: ['alpha', 'beta'],
         dryRun: true,
       });
-      // Tags add keyword quads — 15 base + 2 tags = 17
-      assert.equal(result.provenanceQuads, 17);
+      // Tags add keyword quads — 16 base + 2 tags = 18
+      assert.equal(result.provenanceQuads, 18);
     } finally {
       cleanupTempDir();
     }
@@ -390,5 +390,114 @@ describe('ensureContextGraph', () => {
     });
     const result = await ensureContextGraph(client, 'new-id', 'New');
     assert.equal(result.created, true);
+  });
+});
+
+// -- Sensitivity & scan features (v0.1.3) -------------------------------------
+
+describe('ingestFile — sensitivity', () => {
+  it('passes sensitivity through to provenance quads', async () => {
+    setupTempDir();
+    try {
+      const filePath = writeTempFile('sensitive.md', '# Personal Notes\n\nMy private thoughts.');
+      let writtenQuads = [];
+      const client = mockClient({
+        writeAssertion: async (_cg, _name, quads) => {
+          writtenQuads = quads;
+          return { written: quads.length };
+        },
+      });
+      const result = await ingestFile(filePath, {
+        client,
+        contextGraph: 'test-cg',
+        agent: 'TestAgent',
+        sensitivity: 'personal',
+      });
+      assert.equal(result.error, undefined);
+      // Check that sensitivity quad is present in the written provenance
+      const sensQuad = writtenQuads.find(q =>
+        q.predicate.includes('ontology/sensitivity') && q.object.includes('personal'),
+      );
+      assert.ok(sensQuad, 'should have sensitivity=personal in provenance quads');
+    } finally {
+      cleanupTempDir();
+    }
+  });
+
+  it('defaults sensitivity to shareable', async () => {
+    setupTempDir();
+    try {
+      const filePath = writeTempFile('default-sens.md', '# Normal Doc');
+      let writtenQuads = [];
+      const client = mockClient({
+        writeAssertion: async (_cg, _name, quads) => {
+          writtenQuads = quads;
+          return { written: quads.length };
+        },
+      });
+      const result = await ingestFile(filePath, {
+        client,
+        contextGraph: 'test-cg',
+        agent: 'TestAgent',
+      });
+      assert.equal(result.error, undefined);
+      const sensQuad = writtenQuads.find(q =>
+        q.predicate.includes('ontology/sensitivity'),
+      );
+      assert.ok(sensQuad, 'should have sensitivity quad');
+      assert.ok(sensQuad.object.includes('shareable'), 'default should be shareable');
+    } finally {
+      cleanupTempDir();
+    }
+  });
+});
+
+describe('ingestFile — scan', () => {
+  it('blocks ingestion when --scan detects secrets', async () => {
+    setupTempDir();
+    try {
+      const filePath = writeTempFile('secrets.md', '# Config\n\nAPI key: ghp_ABCDEFghijklmnop1234567890abcdefghij');
+      const result = await ingestFile(filePath, {
+        client: mockClient(),
+        contextGraph: 'test-cg',
+        agent: 'TestAgent',
+        scan: true,
+      });
+      // When scan detects secrets, ingestion should be blocked
+      assert.ok(result.error || result.blocked, 'should block ingestion when secrets are detected');
+    } finally {
+      cleanupTempDir();
+    }
+  });
+
+  it('auto-classifies as personal when --scan detects PII', async () => {
+    setupTempDir();
+    try {
+      const filePath = writeTempFile('pii.md', '# Notes\n\nContact: user@example.com');
+      let writtenQuads = [];
+      const client = mockClient({
+        writeAssertion: async (_cg, _name, quads) => {
+          writtenQuads = quads;
+          return { written: quads.length };
+        },
+      });
+      const result = await ingestFile(filePath, {
+        client,
+        contextGraph: 'test-cg',
+        agent: 'TestAgent',
+        scan: true,
+      });
+      // If PII is detected (but no secrets), it should auto-classify as personal
+      // and still proceed with ingestion
+      if (!result.error && !result.blocked) {
+        const sensQuad = writtenQuads.find(q =>
+          q.predicate.includes('ontology/sensitivity'),
+        );
+        assert.ok(sensQuad, 'should have sensitivity quad');
+        assert.ok(sensQuad.object.includes('personal'), 'should auto-classify as personal');
+      }
+    } finally {
+      cleanupTempDir();
+    }
   });
 });

@@ -41,7 +41,7 @@
   "install": {
     "kind": "cli",
     "package": "dkg-wm-bridge",
-    "version": "0.1.2",
+    "version": "0.1.3",
     "binary": "wm-bridge",
     "usageHint": "Run 'wm-bridge init --agent <name> --framework <openclaw|hermes>' to configure, then 'wm-bridge ingest <path>' to start depositing artifacts."
   },
@@ -64,11 +64,11 @@
       "POST /api/query"
     ],
     "credentialsHandled": [],
-    "notes": "Zero network egress beyond the local DKG node. No install scripts. No dynamic code loading. No eval. Reads DKG auth token from ~/.dkg/auth.token or DKG_AUTH_TOKEN env var. Both DKG_API_URL and DKG_AUTH_TOKEN have sensible defaults and are not strictly required as env vars."
+    "notes": "Zero network egress beyond the local DKG node. No install scripts. No dynamic code loading. No eval. Reads DKG auth token from ~/.dkg/auth.token or DKG_AUTH_TOKEN env var. Both DKG_API_URL and DKG_AUTH_TOKEN have sensible defaults and are not strictly required as env vars. Artifacts are classified by sensitivity level (public/shareable/personal/secret) at ingestion time. Promotion guards prevent personal/secret artifacts from reaching Shared Memory. Optional --scan flag detects PII and secrets before ingestion. All operations are audit-logged to ~/.dkg/audit.log."
   },
   "trustTier": "community",
   "designBrief": "https://github.com/jalopy1/dkg-wm-bridge/blob/main/DESIGN.md",
   "demo": "https://asciinema.org/a/719893",
   "promotionPath": "Artifacts enter Working Memory as 'draft' status assertions with full PROV-O provenance (agent peer ID, timestamp, source file). Status tags track maturity: draft → reviewed → promote-ready → promoted → verified-ready. The 'promote' command moves artifacts to Shared Memory via GossipSub. Deterministic URIs (urn:dkg:wm-bridge:artifact/<hash>) remain stable through WM → SWM → VM promotion. Schema.org + PROV-O metadata is compatible with ClaimReview (the standard used by context oracles). Round 2 integration: our Context Oracle project will consume these artifacts as oracle inputs for claim verification.",
-  "fitNotes": "Directly implements the 'OpenClaw adapter that deposits every drafted artifact into the author's Working Memory' shape described in the bounty call Section 4. Extends to Hermes and generic agents. The agent's daily memory cycle (write notes → curate → publish findings) maps onto the WM → SWM → VM trust gradient. Multi-agent collaboration via shared Context Graphs enables the team-scratchpad pattern."
+  "fitNotes": "Directly implements the 'OpenClaw adapter that deposits every drafted artifact into the author's Working Memory' shape described in the bounty call Section 4. Extends to Hermes and generic agents. The agent's daily memory cycle (write notes → curate → publish findings) maps onto the WM → SWM → VM trust gradient. Multi-agent collaboration via shared Context Graphs enables the team-scratchpad pattern. The privacy protocol (sensitivity classification, PII/secret scanning, promotion guards) ensures personal and secret content never leaves the operator's node."
 }

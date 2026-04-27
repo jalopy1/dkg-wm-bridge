@@ -102,8 +102,8 @@ describe('assertionName', () => {
 describe('artifactToQuads', () => {
   it('generates expected quad count', () => {
     const quads = artifactToQuads(baseMeta({ tags: ['test', 'demo'] }));
-    // 2 types + 6 schema (name,dateCreated,author,encodingFormat,sha256,text) + 3 prov + 3 wmbo + 2 tags + 2 agent = 18
-    assert.equal(quads.length, 18);
+    // 2 types + 6 schema (name,dateCreated,author,encodingFormat,sha256,text) + 3 prov + 3 wmbo + 1 sensitivity + 2 tags + 2 agent = 19
+    assert.equal(quads.length, 19);
   });
 
   it('includes schema.org type', () => {
@@ -130,14 +130,14 @@ describe('artifactToQuads', () => {
 describe('provenanceQuads', () => {
   it('generates correct number of quads without tags', () => {
     const quads = provenanceQuads(baseMeta());
-    // 2 types + 5 schema (name,dateCreated,author,encodingFormat,sha256) + 3 prov + 3 wmbo + 2 agent = 15
-    assert.equal(quads.length, 15);
+    // 2 types + 5 schema (name,dateCreated,author,encodingFormat,sha256) + 3 prov + 3 wmbo + 1 sensitivity + 2 agent = 16
+    assert.equal(quads.length, 16);
   });
 
   it('generates correct number of quads with tags', () => {
     const quads = provenanceQuads(baseMeta({ tags: ['alpha', 'beta', 'gamma'] }));
-    // 15 base + 3 tags = 18
-    assert.equal(quads.length, 18);
+    // 16 base + 3 tags = 19
+    assert.equal(quads.length, 19);
   });
 
   // -- RDF type triples
@@ -288,6 +288,35 @@ describe('provenanceQuads', () => {
     );
     assert.ok(agentNameQ, 'should have agent name triple');
     assert.ok(agentNameQ.object.includes('TestAgent'), 'should contain agent name');
+  });
+
+  // -- Sensitivity triple (wmbo:sensitivity)
+  it('includes wmbo:sensitivity with default value shareable', () => {
+    const quads = provenanceQuads(baseMeta());
+    const sensQ = findQuad(quads, 'ontology/sensitivity');
+    assert.ok(sensQ, 'should have wmbo:sensitivity quad');
+    assert.ok(sensQ.object.includes('shareable'), 'default sensitivity should be shareable');
+  });
+
+  it('sets custom sensitivity value when provided', () => {
+    const quads = provenanceQuads(baseMeta({ sensitivity: 'personal' }));
+    const sensQ = findQuad(quads, 'ontology/sensitivity');
+    assert.ok(sensQ, 'should have wmbo:sensitivity quad');
+    assert.ok(sensQ.object.includes('personal'), 'sensitivity should be personal');
+  });
+
+  it('sets sensitivity to secret when provided', () => {
+    const quads = provenanceQuads(baseMeta({ sensitivity: 'secret' }));
+    const sensQ = findQuad(quads, 'ontology/sensitivity');
+    assert.ok(sensQ, 'should have wmbo:sensitivity quad');
+    assert.ok(sensQ.object.includes('secret'), 'sensitivity should be secret');
+  });
+
+  it('sets sensitivity to public when provided', () => {
+    const quads = provenanceQuads(baseMeta({ sensitivity: 'public' }));
+    const sensQ = findQuad(quads, 'ontology/sensitivity');
+    assert.ok(sensQ, 'should have wmbo:sensitivity quad');
+    assert.ok(sensQ.object.includes('public'), 'sensitivity should be public');
   });
 
   // -- Does NOT include raw content (unlike artifactToQuads)

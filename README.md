@@ -13,6 +13,45 @@ Takes the knowledge artifacts an agent produces — daily memory logs, long-term
 - **Status tags** tracking position in the trust gradient (`draft` → `reviewed` → `promote-ready` → `promoted` → `verified-ready`)
 - **Deterministic URIs** that remain stable through WM → SWM → VM promotion
 
+## Security & Privacy
+
+The bridge includes a data classification protocol to prevent accidental exposure of sensitive content through the DKG trust gradient.
+
+### Sensitivity Levels
+
+Every artifact is assigned a sensitivity level at ingestion time:
+
+| Level | Description | Promotable? |
+|-------|-------------|-------------|
+| `public` | Safe for anyone to see | Yes |
+| `shareable` | OK for team/collaborators (default) | Yes |
+| `personal` | Contains PII or personal context | No — promotion blocked |
+| `secret` | Contains credentials, API keys, etc. | No — promotion blocked |
+
+Use `--sensitivity` to classify manually:
+
+```bash
+wm-bridge ingest notes.md --sensitivity personal
+```
+
+### Automatic Scanning
+
+Use `--scan` to run PII and secret detection before ingesting. The scanner checks for API keys, tokens, email addresses, IP addresses, home directory paths, and SSH private keys.
+
+```bash
+wm-bridge ingest research.md --scan
+```
+
+If secrets are found, ingestion is blocked. If PII is found, the artifact is automatically classified as `personal` (unless a stricter level is set).
+
+### Promotion Guards
+
+The `promote` command refuses to promote artifacts classified as `personal` or `secret`. This ensures sensitive content stays in Working Memory on the operator's own node and never reaches Shared Memory or the broader network.
+
+### Audit Logging
+
+All ingest and promote operations are logged to `~/.dkg/audit.log` with timestamps, sensitivity levels, and scan results for compliance and traceability.
+
 ## Quick Start
 
 ```bash
@@ -67,6 +106,8 @@ wm-bridge info wm-bridge-memory-daily-a1b2c3d4
 | `--status <tag>` | Status tag: `draft\|reviewed\|promote-ready` |
 | `--tags <t1,t2>` | Comma-separated tags |
 | `--recursive, -r` | Recurse into subdirectories |
+| `--sensitivity <level>` | Sensitivity: `public\|shareable\|personal\|secret` |
+| `--scan` | Run PII/secret detection before ingesting |
 | `--dry-run` | Preview without writing |
 
 ## Multi-Agent Support
