@@ -142,7 +142,7 @@ export async function queryArtifacts(
 
   const bindings: Record<string, string>[] = raw?.result?.bindings ?? raw?.results?.bindings ?? [];
 
-  return bindings.map((row) => {
+  const mapped = bindings.map((row) => {
     const content = cleanLiteral(row.content);
     const preview = content.length > 200 ? content.slice(0, 200) + '...' : content;
 
@@ -157,5 +157,13 @@ export async function queryArtifacts(
       tags: cleanLiteral(row.tags),
       contentPreview: preview,
     };
+  });
+
+  // Deduplicate by URI (multi-tag artifacts produce duplicate SPARQL rows)
+  const seen = new Set<string>();
+  return mapped.filter((r) => {
+    if (seen.has(r.uri)) return false;
+    seen.add(r.uri);
+    return true;
   });
 }

@@ -41,7 +41,7 @@
   "install": {
     "kind": "cli",
     "package": "dkg-wm-bridge",
-    "version": "0.1.4",
+    "version": "0.1.5",
     "binary": "wm-bridge",
     "usageHint": "Run 'wm-bridge init --agent <name> --framework <openclaw|hermes>' to configure, then 'wm-bridge ingest <path>' to start depositing artifacts."
   },

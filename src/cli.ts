@@ -154,6 +154,361 @@ function shortDate(v: string | undefined): string {
   return cleaned.slice(0, 10);
 }
 
+// -- Command handlers ---------------------------------------------------------
+
+async function handleCheck(
+  client: DkgClient,
+  config: Partial<BridgeConfig>,
+  _flags: Record<string, string | boolean>,
+): Promise<void> {
+  const s = await client.status();
+  if (!s.ok) {
+    console.error(`❌ DKG node unreachable: ${s.error}`);
+    process.exit(1);
+  }
+  const addr = await client.getAgentAddress();
+  console.log(`✅ DKG v10 node reachable`);
+  console.log(`   Peer ID: ${s.peerId}`);
+  console.log(`   Wallet:  ${addr}`);
+  if (config.agent) {
+    console.log(`   Agent:   ${config.agent} (${config.framework ?? 'generic'})`);
+    console.log(`   CG:      ${config.contextGraph ?? 'agent-artifacts'}`);
+  } else {
+    console.log(`   ℹ️  Run 'wm-bridge init' to configure your agent identity`);
+  }
+}
+
+async function handleInit(
+  client: DkgClient,
+  _config: Partial<BridgeConfig>,
+  _flags: Record<string, string | boolean>,
+  agent: string,
+  cg: string,
+  framework: string,
+): Promise<void> {
+  // Auto-detect peer ID and wallet from the node
+  const s = await client.status();
+  if (!s.ok) {
+    console.error(`❌ DKG node unreachable: ${s.error}`);
+    process.exit(1);
+  }
+
+  const newConfig: BridgeConfig = {
+    agent,
+    agentPeerId: s.peerId,
+    contextGraph: cg,
+    framework: framework as BridgeConfig['framework'],
+    dkgUrl: client.baseUrl,
+  };
+
+  // Create context graph
+  const desc = `Working Memory context graph for ${agent} (${framework}) — agent artifacts, memory files, research notes.`;
+  const { created } = await ensureContextGraph(client, cg, `${agent} Artifacts`, desc);
+
+  // Save config
+  saveConfig(newConfig);
+
+  console.log(`✅ Initialized wm-bridge for ${agent} (${framework})`);
+  console.log(`   Context graph: ${cg} ${created ? '(created)' : '(exists)'}`);
+  console.log(`   Peer ID: ${s.peerId}`);
+  console.log(`   Config saved: ${CONFIG_PATH}`);
+}
+
+async function handleIngest(
+  client: DkgClient,
+  config: Partial<BridgeConfig>,
+  flags: Record<string, string | boolean>,
+  positional: string[],
+  agent: string,
+  cg: string,
+): Promise<void> {
+  if (!positional[0]) {
+    console.error('Usage: wm-bridge ingest <file|directory>');
+    process.exit(1);
+  }
+  const target = resolve(positional[0]);
+  let stat;
+  try {
+    stat = statSync(target);
+  } catch {
+    console.error(`❌ File not found: ${target}`);
+    process.exit(1);
+  }
+  if (stat.isFile() && stat.size === 0) {
+    console.error('❌ File is empty. Nothing to ingest.');
+    process.exit(1);
+  }
+  if (!stat.isFile() && !stat.isDirectory()) {
+    console.error('❌ Not a regular file or directory.');
+    process.exit(1);
+  }
+  const tags = flags.tags ? (flags.tags as string).split(',').map(t => t.trim()) : undefined;
+  const opts = {
+    client,
+    contextGraph: cg,
+    agent,
+    agentPeerId: config.agentPeerId,
+    status: (flags.status as any) || 'draft',
+    tags,
+    dryRun: !!flags.dryRun,
+    sensitivity: flags.sensitivity as SensitivityLevel | undefined,
+    scan: !!flags.scan,
+    derivedFrom: flags.derivedFrom ? (flags.derivedFrom as string).split(',').map(s => s.trim()).filter(s => s) : undefined,
+    revisionOf: flags.revisionOf as string | undefined,
+  };
+
+  if (stat.isDirectory()) {
+    const results = await ingestDirectory(target, { ...opts, recursive: !!flags.recursive });
+    let ok = 0, fail = 0;
+    for (const r of results) {
+      if (r.error) {
+        console.log(`❌ ${r.file} — ${r.error}`);
+        auditLog('ingest', r.assertionName || r.file, flags.sensitivity as string ?? 'shareable', `error: ${r.error}`);
+        fail++;
+      } else {
+        const triples = r.extractedTriples ? ` + ${r.extractedTriples} extracted` : '';
+        const warn = r.provenanceWarning ? ' ⚠️ provenance write failed' : '';
+        const scanInfo = r.scanResult?.findings.length ? ` [scan: ${r.scanResult.findings.length} finding(s)]` : '';
+        console.log(`✅ ${r.file} → ${r.assertionName} (${r.provenanceQuads} provenance${triples})${warn}${scanInfo}`);
+        auditLog('ingest', r.assertionName, flags.sensitivity as string ?? r.scanResult?.recommendedSensitivity ?? 'shareable', 'ok');
+        ok++;
+      }
+    }
+    console.log(`\n${flags.dryRun ? 'Would ingest' : 'Ingested'}: ${ok} files${fail ? `, ${fail} errors` : ''}`);
+  } else {
+    const result = await ingestFile(target, opts);
+    if (result.error) {
+      console.error(`❌ ${result.file} — ${result.error}`);
+      auditLog('ingest', result.assertionName || result.file, flags.sensitivity as string ?? 'shareable', `error: ${result.error}`);
+      process.exit(1);
+    }
+    const triples = result.extractedTriples ? ` + ${result.extractedTriples} extracted` : '';
+    const warn = result.provenanceWarning ? ' ⚠️ provenance write failed' : '';
+    const scanInfo = result.scanResult?.findings.length ? ` [scan: ${result.scanResult.findings.length} finding(s)]` : '';
+    console.log(`✅ ${result.file} → ${result.assertionName} (${result.provenanceQuads} provenance${triples})${warn}${scanInfo}`);
+    auditLog('ingest', result.assertionName, flags.sensitivity as string ?? result.scanResult?.recommendedSensitivity ?? 'shareable', 'ok');
+  }
+}
+
+async function handleIngestText(
+  client: DkgClient,
+  config: Partial<BridgeConfig>,
+  flags: Record<string, string | boolean>,
+  positional: string[],
+  agent: string,
+  cg: string,
+): Promise<void> {
+  if (positional.length < 2) {
+    console.error('Usage: wm-bridge ingest-text <title> <text>');
+    process.exit(1);
+  }
+  const [title, ...rest] = positional;
+  const text = rest.join(' ');
+  if (!title.trim() || !text.trim()) {
+    console.error('❌ Title and text must not be empty.');
+    process.exit(1);
+  }
+  const tags = flags.tags ? (flags.tags as string).split(',').map(t => t.trim()) : undefined;
+  const kind = (flags.kind as any) || 'knowledge-artifact';
+  const result = await ingestText(text, title, kind, {
+    client,
+    contextGraph: cg,
+    agent,
+    agentPeerId: config.agentPeerId,
+    status: (flags.status as any) || 'draft',
+    tags,
+    dryRun: !!flags.dryRun,
+    sensitivity: flags.sensitivity as SensitivityLevel | undefined,
+    scan: !!flags.scan,
+    derivedFrom: flags.derivedFrom ? (flags.derivedFrom as string).split(',').map(s => s.trim()).filter(s => s) : undefined,
+    revisionOf: flags.revisionOf as string | undefined,
+  });
+  if (result.error) {
+    console.error(`❌ ${result.error}`);
+    auditLog('ingest-text', result.assertionName || title, flags.sensitivity as string ?? 'shareable', `error: ${result.error}`);
+    process.exit(1);
+  }
+  const triples = result.extractedTriples ? ` + ${result.extractedTriples} extracted` : '';
+  const warn = result.provenanceWarning ? ' ⚠️ provenance write failed' : '';
+  const scanInfo = result.scanResult?.findings.length ? ` [scan: ${result.scanResult.findings.length} finding(s)]` : '';
+  console.log(`✅ "${title}" → ${result.assertionName} (${result.provenanceQuads} provenance${triples})${warn}${scanInfo}`);
+  auditLog('ingest-text', result.assertionName, flags.sensitivity as string ?? result.scanResult?.recommendedSensitivity ?? 'shareable', 'ok');
+}
+
+async function handlePromote(
+  client: DkgClient,
+  flags: Record<string, string | boolean>,
+  positional: string[],
+  cg: string,
+): Promise<void> {
+  if (!positional[0]) {
+    console.error('Usage: wm-bridge promote <assertion-name>');
+    process.exit(1);
+  }
+
+  // Check sensitivity before promoting
+  try {
+    const { quads: checkQuads } = await client.queryAssertion(cg, positional[0]);
+    const sensitivityPred = `${WMBO}sensitivity`;
+    const sensitivityQuad = (checkQuads as any[])?.find(
+      (q: any) => q.predicate === sensitivityPred,
+    );
+    if (sensitivityQuad) {
+      const sensValue = cleanLiteral(sensitivityQuad.object);
+      if (sensValue === 'personal' || sensValue === 'secret') {
+        const msg = `🚫 Cannot promote "${positional[0]}" — sensitivity is "${sensValue}". Only "public" or "shareable" artifacts can be promoted to Shared Memory.`;
+        console.error(msg);
+        auditLog('promote', positional[0], sensValue, 'blocked');
+        process.exit(1);
+      }
+    }
+  } catch {
+    console.warn('⚠️  Could not verify sensitivity tag — proceeding with caution');
+    auditLog('promote', positional[0], 'unknown', 'sensitivity-check-failed');
+  }
+
+  const result = await promoteArtifact(client, cg, positional[0]);
+  const count = (result as any).promotedCount ?? '?';
+
+  // Update the assertion's status tag to "promoted"
+  try {
+    const { quads: existingQuads } = await client.queryAssertion(cg, positional[0]);
+    const statusPred = `${WMBO}status`;
+    const artifactSubject = (existingQuads as any[])?.find(
+      (q: any) => q.predicate === statusPred,
+    )?.subject;
+    if (artifactSubject) {
+      await client.writeAssertion(cg, positional[0], [{
+        subject: artifactSubject,
+        predicate: statusPred,
+        object: `"promoted"`,
+      }]);
+    }
+  } catch {
+    // Status update is best-effort; promotion itself already succeeded
+  }
+
+  console.log(`✅ Promoted "${positional[0]}" → Shared Memory (${count} quads)`);
+  auditLog('promote', positional[0], 'shareable', 'ok');
+}
+
+async function handleDiscard(
+  client: DkgClient,
+  positional: string[],
+  _cg: string,
+): Promise<void> {
+  if (!positional[0]) {
+    console.error('Usage: wm-bridge discard <assertion-name>');
+    process.exit(1);
+  }
+  const result = await client.discardAssertion(_cg, positional[0]);
+  console.log(result.discarded
+    ? `✅ Discarded "${positional[0]}" from Working Memory`
+    : `⚠️  Could not discard "${positional[0]}"`);
+}
+
+async function handleStatus(
+  client: DkgClient,
+  cg: string,
+): Promise<void> {
+  const result = await listWorkingMemory(client, cg);
+  const bindings = result?.result?.bindings ?? result?.results?.bindings ?? [];
+  if (!bindings.length) {
+    console.log('No artifacts found in Working Memory.');
+    return;
+  }
+  console.log(`Artifacts in Working Memory (${bindings.length}):\n`);
+  for (const row of bindings) {
+    const name = cleanLiteral(row.name);
+    const kind = cleanLiteral(row.kind);
+    const status = cleanLiteral(row.status);
+    const date = shortDate(row.date);
+    const uri = row.s ?? '—';
+    console.log(`  📄 ${name}`);
+    console.log(`     ${kind} | ${status} | ${date} | ${uri}\n`);
+  }
+}
+
+async function handleQuery(
+  client: DkgClient,
+  flags: Record<string, string | boolean>,
+  positional: string[],
+  cg: string,
+): Promise<void> {
+  const searchTerm = positional[0] || undefined;
+  const rawLimit = flags.limit ? parseInt(flags.limit as string, 10) : 10;
+  if (flags.limit && (isNaN(rawLimit) || rawLimit < 1)) {
+    console.error(`Invalid --limit "${flags.limit}". Must be a positive integer.`);
+    process.exit(1);
+  }
+  const queryLimit = Math.max(1, Math.min(rawLimit, 1000));
+  const queryFormat = (flags.format as string) === 'json' ? 'json' as const : (flags.format as string) === 'human' || !flags.format ? 'human' as const : null;
+  if (!queryFormat) {
+    console.error('❌ Invalid format. Must be: human or json');
+    process.exit(1);
+  }
+
+  // Validate --kind for query (same allowlist as buildArtifactSparql)
+  const validQueryKinds = [
+    'memory-daily', 'memory-longterm', 'research-note',
+    'session-summary', 'document', 'knowledge-artifact',
+  ];
+  if (flags.kind && !validQueryKinds.includes(flags.kind as string)) {
+    console.error(`Invalid --kind "${flags.kind}". Must be one of: ${validQueryKinds.join(', ')}`);
+    process.exit(1);
+  }
+
+  const results = await queryArtifacts(client, cg, {
+    searchTerm,
+    kind: flags.kind as string | undefined,
+    sensitivity: flags.sensitivity as SensitivityLevel | undefined,
+    limit: queryLimit,
+    format: queryFormat,
+  });
+
+  if (!results.length) {
+    console.log('No artifacts found.');
+    return;
+  }
+
+  if (queryFormat === 'json') {
+    console.log(JSON.stringify(results, null, 2));
+  } else {
+    console.log(`Artifacts in Working Memory (${results.length}):\n`);
+    for (const r of results) {
+      console.log(`  📄 ${r.name}`);
+      console.log(`     Kind: ${r.kind} | Status: ${r.status} | Sensitivity: ${r.sensitivity}`);
+      console.log(`     Date: ${r.date} | SHA256: ${r.sha256 || '—'}`);
+      console.log(`     Tags: ${r.tags || '—'} | URI: ${r.uri}`);
+      if (r.contentPreview) {
+        console.log(`     Preview: ${r.contentPreview}`);
+      }
+      console.log();
+    }
+  }
+}
+
+async function handleInfo(
+  client: DkgClient,
+  positional: string[],
+  _cg: string,
+): Promise<void> {
+  if (!positional[0]) {
+    console.error('Usage: wm-bridge info <assertion-name>');
+    process.exit(1);
+  }
+  try {
+    const history = await client.getAssertionHistory(_cg, positional[0]);
+    console.log(`Assertion: ${positional[0]}\n`);
+    console.log(JSON.stringify(history, null, 2));
+  } catch (err) {
+    console.error(`❌ ${err instanceof Error ? err.message : err}`);
+    process.exit(1);
+  }
+}
+
+// -- Main dispatch ------------------------------------------------------------
+
 async function main() {
   const { command, positional, flags } = parseArgs(process.argv.slice(2));
   if (flags.help || !command) usage();
@@ -165,7 +520,6 @@ async function main() {
   const agent = (flags.agent as string) || config.agent || 'Agent';
   const cg = (flags.contextGraph as string) || config.contextGraph || 'agent-artifacts';
   const framework = (flags.framework as string) || config.framework || 'generic';
-  const tags = flags.tags ? (flags.tags as string).split(',').map(t => t.trim()) : undefined;
 
   // Validate flag values
   const validStatuses = ['draft', 'reviewed', 'promote-ready', 'promoted', 'verified-ready'];
@@ -185,327 +539,33 @@ async function main() {
   }
 
   switch (command) {
-    // -- check ----------------------------------------------------------------
-    case 'check': {
-      const s = await client.status();
-      if (!s.ok) {
-        console.error(`❌ DKG node unreachable: ${s.error}`);
-        process.exit(1);
-      }
-      const addr = await client.getAgentAddress();
-      console.log(`✅ DKG v10 node reachable`);
-      console.log(`   Peer ID: ${s.peerId}`);
-      console.log(`   Wallet:  ${addr}`);
-      if (config.agent) {
-        console.log(`   Agent:   ${config.agent} (${config.framework ?? 'generic'})`);
-        console.log(`   CG:      ${config.contextGraph ?? 'agent-artifacts'}`);
-      } else {
-        console.log(`   ℹ️  Run 'wm-bridge init' to configure your agent identity`);
-      }
+    case 'check':
+      await handleCheck(client, config, flags);
       break;
-    }
-
-    // -- init -----------------------------------------------------------------
-    case 'init': {
-      // Auto-detect peer ID and wallet from the node
-      const s = await client.status();
-      if (!s.ok) {
-        console.error(`❌ DKG node unreachable: ${s.error}`);
-        process.exit(1);
-      }
-
-      const newConfig: BridgeConfig = {
-        agent,
-        agentPeerId: s.peerId,
-        contextGraph: cg,
-        framework: framework as BridgeConfig['framework'],
-        dkgUrl: client.baseUrl,
-      };
-
-      // Create context graph
-      const desc = `Working Memory context graph for ${agent} (${framework}) — agent artifacts, memory files, research notes.`;
-      const { created } = await ensureContextGraph(client, cg, `${agent} Artifacts`, desc);
-
-      // Save config
-      saveConfig(newConfig);
-
-      console.log(`✅ Initialized wm-bridge for ${agent} (${framework})`);
-      console.log(`   Context graph: ${cg} ${created ? '(created)' : '(exists)'}`);
-      console.log(`   Peer ID: ${s.peerId}`);
-      console.log(`   Config saved: ${CONFIG_PATH}`);
+    case 'init':
+      await handleInit(client, config, flags, agent, cg, framework);
       break;
-    }
-
-    // -- ingest ---------------------------------------------------------------
-    case 'ingest': {
-      if (!positional[0]) {
-        console.error('Usage: wm-bridge ingest <file|directory>');
-        process.exit(1);
-      }
-      const target = resolve(positional[0]);
-      let stat;
-      try {
-        stat = statSync(target);
-      } catch {
-        console.error(`❌ File not found: ${target}`);
-        process.exit(1);
-      }
-      if (stat.isFile() && stat.size === 0) {
-        console.error('❌ File is empty. Nothing to ingest.');
-        process.exit(1);
-      }
-      if (!stat.isFile() && !stat.isDirectory()) {
-        console.error('❌ Not a regular file or directory.');
-        process.exit(1);
-      }
-      const opts = {
-        client,
-        contextGraph: cg,
-        agent,
-        agentPeerId: config.agentPeerId,
-        status: (flags.status as any) || 'draft',
-        tags,
-        dryRun: !!flags.dryRun,
-        sensitivity: flags.sensitivity as SensitivityLevel | undefined,
-        scan: !!flags.scan,
-        derivedFrom: flags.derivedFrom ? (flags.derivedFrom as string).split(',').map(s => s.trim()).filter(s => s) : undefined,
-        revisionOf: flags.revisionOf as string | undefined,
-      };
-
-      if (stat.isDirectory()) {
-        const results = await ingestDirectory(target, { ...opts, recursive: !!flags.recursive });
-        let ok = 0, fail = 0;
-        for (const r of results) {
-          if (r.error) {
-            console.log(`❌ ${r.file} — ${r.error}`);
-            auditLog('ingest', r.assertionName || r.file, flags.sensitivity as string ?? 'shareable', `error: ${r.error}`);
-            fail++;
-          } else {
-            const triples = r.extractedTriples ? ` + ${r.extractedTriples} extracted` : '';
-            const warn = r.provenanceWarning ? ' ⚠️ provenance write failed' : '';
-            const scanInfo = r.scanResult?.findings.length ? ` [scan: ${r.scanResult.findings.length} finding(s)]` : '';
-            console.log(`✅ ${r.file} → ${r.assertionName} (${r.provenanceQuads} provenance${triples})${warn}${scanInfo}`);
-            auditLog('ingest', r.assertionName, flags.sensitivity as string ?? r.scanResult?.recommendedSensitivity ?? 'shareable', 'ok');
-            ok++;
-          }
-        }
-        console.log(`\n${flags.dryRun ? 'Would ingest' : 'Ingested'}: ${ok} files${fail ? `, ${fail} errors` : ''}`);
-      } else {
-        const result = await ingestFile(target, opts);
-        if (result.error) {
-          console.error(`❌ ${result.file} — ${result.error}`);
-          auditLog('ingest', result.assertionName || result.file, flags.sensitivity as string ?? 'shareable', `error: ${result.error}`);
-          process.exit(1);
-        }
-        const triples = result.extractedTriples ? ` + ${result.extractedTriples} extracted` : '';
-        const warn = result.provenanceWarning ? ' ⚠️ provenance write failed' : '';
-        const scanInfo = result.scanResult?.findings.length ? ` [scan: ${result.scanResult.findings.length} finding(s)]` : '';
-        console.log(`✅ ${result.file} → ${result.assertionName} (${result.provenanceQuads} provenance${triples})${warn}${scanInfo}`);
-        auditLog('ingest', result.assertionName, flags.sensitivity as string ?? result.scanResult?.recommendedSensitivity ?? 'shareable', 'ok');
-      }
+    case 'ingest':
+      await handleIngest(client, config, flags, positional, agent, cg);
       break;
-    }
-
-    // -- ingest-text ----------------------------------------------------------
-    case 'ingest-text': {
-      if (positional.length < 2) {
-        console.error('Usage: wm-bridge ingest-text <title> <text>');
-        process.exit(1);
-      }
-      const [title, ...rest] = positional;
-      const text = rest.join(' ');
-      if (!title.trim() || !text.trim()) {
-        console.error('❌ Title and text must not be empty.');
-        process.exit(1);
-      }
-      const kind = (flags.kind as any) || 'knowledge-artifact';
-      const result = await ingestText(text, title, kind, {
-        client,
-        contextGraph: cg,
-        agent,
-        agentPeerId: config.agentPeerId,
-        status: (flags.status as any) || 'draft',
-        tags,
-        dryRun: !!flags.dryRun,
-        sensitivity: flags.sensitivity as SensitivityLevel | undefined,
-        scan: !!flags.scan,
-        derivedFrom: flags.derivedFrom ? (flags.derivedFrom as string).split(',').map(s => s.trim()).filter(s => s) : undefined,
-        revisionOf: flags.revisionOf as string | undefined,
-      });
-      if (result.error) {
-        console.error(`❌ ${result.error}`);
-        auditLog('ingest-text', result.assertionName || title, flags.sensitivity as string ?? 'shareable', `error: ${result.error}`);
-        process.exit(1);
-      }
-      const triples = result.extractedTriples ? ` + ${result.extractedTriples} extracted` : '';
-      const warn = result.provenanceWarning ? ' ⚠️ provenance write failed' : '';
-      const scanInfo = result.scanResult?.findings.length ? ` [scan: ${result.scanResult.findings.length} finding(s)]` : '';
-      console.log(`✅ "${title}" → ${result.assertionName} (${result.provenanceQuads} provenance${triples})${warn}${scanInfo}`);
-      auditLog('ingest-text', result.assertionName, flags.sensitivity as string ?? result.scanResult?.recommendedSensitivity ?? 'shareable', 'ok');
+    case 'ingest-text':
+      await handleIngestText(client, config, flags, positional, agent, cg);
       break;
-    }
-
-    // -- promote --------------------------------------------------------------
-    case 'promote': {
-      if (!positional[0]) {
-        console.error('Usage: wm-bridge promote <assertion-name>');
-        process.exit(1);
-      }
-
-      // Check sensitivity before promoting
-      try {
-        const { quads: checkQuads } = await client.queryAssertion(cg, positional[0]);
-        const sensitivityPred = `${WMBO}sensitivity`;
-        const sensitivityQuad = (checkQuads as any[])?.find(
-          (q: any) => q.predicate === sensitivityPred,
-        );
-        if (sensitivityQuad) {
-          const sensValue = cleanLiteral(sensitivityQuad.object);
-          if (sensValue === 'personal' || sensValue === 'secret') {
-            const msg = `🚫 Cannot promote "${positional[0]}" — sensitivity is "${sensValue}". Only "public" or "shareable" artifacts can be promoted to Shared Memory.`;
-            console.error(msg);
-            auditLog('promote', positional[0], sensValue, 'blocked');
-            process.exit(1);
-          }
-        }
-      } catch {
-        console.warn('⚠️  Could not verify sensitivity tag — proceeding with caution');
-        auditLog('promote', positional[0], 'unknown', 'sensitivity-check-failed');
-      }
-
-      const result = await promoteArtifact(client, cg, positional[0]);
-      const count = (result as any).promotedCount ?? '?';
-
-      // Update the assertion's status tag to "promoted"
-      try {
-        const { quads: existingQuads } = await client.queryAssertion(cg, positional[0]);
-        const statusPred = `${WMBO}status`;
-        const artifactSubject = (existingQuads as any[])?.find(
-          (q: any) => q.predicate === statusPred,
-        )?.subject;
-        if (artifactSubject) {
-          await client.writeAssertion(cg, positional[0], [{
-            subject: artifactSubject,
-            predicate: statusPred,
-            object: `"promoted"`,
-          }]);
-        }
-      } catch {
-        // Status update is best-effort; promotion itself already succeeded
-      }
-
-      console.log(`✅ Promoted "${positional[0]}" → Shared Memory (${count} quads)`);
-      auditLog('promote', positional[0], 'shareable', 'ok');
+    case 'promote':
+      await handlePromote(client, flags, positional, cg);
       break;
-    }
-
-    // -- discard --------------------------------------------------------------
-    case 'discard': {
-      if (!positional[0]) {
-        console.error('Usage: wm-bridge discard <assertion-name>');
-        process.exit(1);
-      }
-      const result = await client.discardAssertion(cg, positional[0]);
-      console.log(result.discarded
-        ? `✅ Discarded "${positional[0]}" from Working Memory`
-        : `⚠️  Could not discard "${positional[0]}"`);
+    case 'discard':
+      await handleDiscard(client, positional, cg);
       break;
-    }
-
-    // -- status ---------------------------------------------------------------
-    case 'status': {
-      const result = await listWorkingMemory(client, cg);
-      const bindings = result?.result?.bindings ?? result?.results?.bindings ?? [];
-      if (!bindings.length) {
-        console.log('No artifacts found in Working Memory.');
-        break;
-      }
-      console.log(`Artifacts in Working Memory (${bindings.length}):\n`);
-      for (const row of bindings) {
-        const name = cleanLiteral(row.name);
-        const kind = cleanLiteral(row.kind);
-        const status = cleanLiteral(row.status);
-        const date = shortDate(row.date);
-        const uri = row.s ?? '—';
-        console.log(`  📄 ${name}`);
-        console.log(`     ${kind} | ${status} | ${date} | ${uri}\n`);
-      }
+    case 'status':
+      await handleStatus(client, cg);
       break;
-    }
-
-    // -- query ----------------------------------------------------------------
-    case 'query': {
-      const searchTerm = positional[0] || undefined;
-      const rawLimit = flags.limit ? parseInt(flags.limit as string, 10) : 10;
-      if (flags.limit && (isNaN(rawLimit) || rawLimit < 1)) {
-        console.error(`Invalid --limit "${flags.limit}". Must be a positive integer.`);
-        process.exit(1);
-      }
-      const queryLimit = Math.max(1, Math.min(rawLimit, 1000));
-      const queryFormat = (flags.format as string) === 'json' ? 'json' as const : (flags.format as string) === 'human' || !flags.format ? 'human' as const : null;
-      if (!queryFormat) {
-        console.error('❌ Invalid format. Must be: human or json');
-        process.exit(1);
-      }
-
-      // Validate --kind for query (same allowlist as buildArtifactSparql)
-      const validQueryKinds = [
-        'memory-daily', 'memory-longterm', 'research-note',
-        'session-summary', 'document', 'knowledge-artifact',
-      ];
-      if (flags.kind && !validQueryKinds.includes(flags.kind as string)) {
-        console.error(`Invalid --kind "${flags.kind}". Must be one of: ${validQueryKinds.join(', ')}`);
-        process.exit(1);
-      }
-
-      const results = await queryArtifacts(client, cg, {
-        searchTerm,
-        kind: flags.kind as string | undefined,
-        sensitivity: flags.sensitivity as SensitivityLevel | undefined,
-        limit: queryLimit,
-        format: queryFormat,
-      });
-
-      if (!results.length) {
-        console.log('No artifacts found.');
-        break;
-      }
-
-      if (queryFormat === 'json') {
-        console.log(JSON.stringify(results, null, 2));
-      } else {
-        console.log(`Artifacts in Working Memory (${results.length}):\n`);
-        for (const r of results) {
-          console.log(`  📄 ${r.name}`);
-          console.log(`     Kind: ${r.kind} | Status: ${r.status} | Sensitivity: ${r.sensitivity}`);
-          console.log(`     Date: ${r.date} | SHA256: ${r.sha256 || '—'}`);
-          console.log(`     Tags: ${r.tags || '—'} | URI: ${r.uri}`);
-          if (r.contentPreview) {
-            console.log(`     Preview: ${r.contentPreview}`);
-          }
-          console.log();
-        }
-      }
+    case 'query':
+      await handleQuery(client, flags, positional, cg);
       break;
-    }
-
-    // -- info -----------------------------------------------------------------
-    case 'info': {
-      if (!positional[0]) {
-        console.error('Usage: wm-bridge info <assertion-name>');
-        process.exit(1);
-      }
-      try {
-        const history = await client.getAssertionHistory(cg, positional[0]);
-        console.log(`Assertion: ${positional[0]}\n`);
-        console.log(JSON.stringify(history, null, 2));
-      } catch (err) {
-        console.error(`❌ ${err instanceof Error ? err.message : err}`);
-        process.exit(1);
-      }
+    case 'info':
+      await handleInfo(client, positional, cg);
       break;
-    }
-
     default:
       console.error(`Unknown command: ${command}`);
       usage();

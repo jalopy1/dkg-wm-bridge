@@ -31,7 +31,8 @@ interface PatternDef {
 
 const PATTERNS: PatternDef[] = [
   // Secrets
-  { type: 'secret', name: 'api-key', regex: /(api[_-]?key|token|password|secret|credential)\s*[:=]\s*\S+/gi },
+  { type: 'secret', name: 'api-key', regex: /(api[_-]?key|api[_-]?token|password|secret[_-]?key|credential)\s*[:=]\s*\S+/gi },
+  { type: 'secret', name: 'env-secret', regex: /[A-Z_]*(TOKEN|KEY|SECRET|PASSWORD)\s*[:=]\s*\S{8,}/g },
   { type: 'secret', name: 'github-token', regex: /ghp_[a-zA-Z0-9]{36}/g },
   { type: 'secret', name: 'npm-token', regex: /npm_[a-zA-Z0-9]{36}/g },
   { type: 'secret', name: 'bearer-token', regex: /Bearer\s+[a-zA-Z0-9\-._~+/]{20,}/g },
