@@ -43,6 +43,10 @@ export interface IngestOptions {
   sensitivity?: SensitivityLevel;
   /** Run PII/secret scanner before ingesting */
   scan?: boolean;
+  /** Assertion name(s) this artifact was derived from */
+  derivedFrom?: string | string[];
+  /** Assertion name this artifact is a revision of */
+  revisionOf?: string;
 }
 
 export interface IngestResult {
@@ -173,6 +177,8 @@ export async function ingestFile(filePath: string, opts: IngestOptions): Promise
     status: opts.status ?? 'draft',
     tags: opts.tags,
     sensitivity: effectiveSensitivity,
+    derivedFrom: opts.derivedFrom,
+    revisionOf: opts.revisionOf,
   };
 
   const name = assertionName(meta);
@@ -324,6 +330,8 @@ export async function ingestText(
     tags: opts.tags,
     agentAddress,
     sensitivity: effectiveSensitivity,
+    derivedFrom: opts.derivedFrom,
+    revisionOf: opts.revisionOf,
   };
 
   const name = assertionName(meta);

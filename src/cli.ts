@@ -27,6 +27,7 @@ import {
   listWorkingMemory,
   ensureContextGraph,
 } from './ingest.js';
+import { queryArtifacts } from './query.js';
 import { WMBO, type SensitivityLevel } from './rdf.js';
 
 // -- Config -------------------------------------------------------------------
@@ -82,6 +83,7 @@ Commands:
   promote <assertion-name>      Promote an assertion from WM to Shared Memory
   discard <assertion-name>      Discard a WM assertion (delete without promoting)
   status                        List artifacts currently in Working Memory
+  query [search-term]           Search/list artifacts with detail (sensitivity, tags, sha256)
   info <assertion-name>         Show assertion details and history
 
 Options:
@@ -90,9 +92,13 @@ Options:
   --framework <name>            Agent framework: openclaw, hermes, generic
   --status <tag>                Status tag: draft|reviewed|promote-ready (default: draft)
   --sensitivity <level>         Sensitivity level: public|shareable|personal|secret
+  --derived-from <n1,n2,...>    Assertion name(s) this artifact was derived from
+  --revision-of <name>          Assertion name this artifact is a revision of
   --scan                        Run PII/secret scanner before ingesting
-  --kind <type>                 Artifact kind for ingest-text: memory-daily|research-note|document|... (default: knowledge-artifact)
+  --kind <type>                 Artifact kind: memory-daily|research-note|document|... (default: knowledge-artifact)
   --tags <t1,t2,...>            Comma-separated tags
+  --limit <n>                   Max results for query (default: 10)
+  --format <fmt>                Output format for query: human|json (default: human)
   --recursive, -r               Recurse into subdirectories
   --dry-run                     Show what would be written without writing
   --help, -h                    Show this help
@@ -125,6 +131,10 @@ function parseArgs(argv: string[]): { command: string; positional: string[]; fla
     if (arg === '--sensitivity' && argv[i + 1]) { flags.sensitivity = argv[++i]; continue; }
     if (arg === '--tags' && argv[i + 1]) { flags.tags = argv[++i]; continue; }
     if (arg === '--kind' && argv[i + 1]) { flags.kind = argv[++i]; continue; }
+    if (arg === '--limit' && argv[i + 1]) { flags.limit = argv[++i]; continue; }
+    if (arg === '--format' && argv[i + 1]) { flags.format = argv[++i]; continue; }
+    if (arg === '--derived-from' && argv[i + 1]) { flags.derivedFrom = argv[++i]; continue; }
+    if (arg === '--revision-of' && argv[i + 1]) { flags.revisionOf = argv[++i]; continue; }
     if (!arg.startsWith('-')) positional.push(arg);
   }
 
@@ -240,6 +250,14 @@ async function main() {
         console.error(`❌ File not found: ${target}`);
         process.exit(1);
       }
+      if (stat.isFile() && stat.size === 0) {
+        console.error('❌ File is empty. Nothing to ingest.');
+        process.exit(1);
+      }
+      if (!stat.isFile() && !stat.isDirectory()) {
+        console.error('❌ Not a regular file or directory.');
+        process.exit(1);
+      }
       const opts = {
         client,
         contextGraph: cg,
@@ -250,6 +268,8 @@ async function main() {
         dryRun: !!flags.dryRun,
         sensitivity: flags.sensitivity as SensitivityLevel | undefined,
         scan: !!flags.scan,
+        derivedFrom: flags.derivedFrom ? (flags.derivedFrom as string).split(',').map(s => s.trim()).filter(s => s) : undefined,
+        revisionOf: flags.revisionOf as string | undefined,
       };
 
       if (stat.isDirectory()) {
@@ -294,6 +314,10 @@ async function main() {
       }
       const [title, ...rest] = positional;
       const text = rest.join(' ');
+      if (!title.trim() || !text.trim()) {
+        console.error('❌ Title and text must not be empty.');
+        process.exit(1);
+      }
       const kind = (flags.kind as any) || 'knowledge-artifact';
       const result = await ingestText(text, title, kind, {
         client,
@@ -305,6 +329,8 @@ async function main() {
         dryRun: !!flags.dryRun,
         sensitivity: flags.sensitivity as SensitivityLevel | undefined,
         scan: !!flags.scan,
+        derivedFrom: flags.derivedFrom ? (flags.derivedFrom as string).split(',').map(s => s.trim()).filter(s => s) : undefined,
+        revisionOf: flags.revisionOf as string | undefined,
       });
       if (result.error) {
         console.error(`❌ ${result.error}`);
@@ -403,6 +429,62 @@ async function main() {
         const uri = row.s ?? '—';
         console.log(`  📄 ${name}`);
         console.log(`     ${kind} | ${status} | ${date} | ${uri}\n`);
+      }
+      break;
+    }
+
+    // -- query ----------------------------------------------------------------
+    case 'query': {
+      const searchTerm = positional[0] || undefined;
+      const rawLimit = flags.limit ? parseInt(flags.limit as string, 10) : 10;
+      if (flags.limit && (isNaN(rawLimit) || rawLimit < 1)) {
+        console.error(`Invalid --limit "${flags.limit}". Must be a positive integer.`);
+        process.exit(1);
+      }
+      const queryLimit = Math.max(1, Math.min(rawLimit, 1000));
+      const queryFormat = (flags.format as string) === 'json' ? 'json' as const : (flags.format as string) === 'human' || !flags.format ? 'human' as const : null;
+      if (!queryFormat) {
+        console.error('❌ Invalid format. Must be: human or json');
+        process.exit(1);
+      }
+
+      // Validate --kind for query (same allowlist as buildArtifactSparql)
+      const validQueryKinds = [
+        'memory-daily', 'memory-longterm', 'research-note',
+        'session-summary', 'document', 'knowledge-artifact',
+      ];
+      if (flags.kind && !validQueryKinds.includes(flags.kind as string)) {
+        console.error(`Invalid --kind "${flags.kind}". Must be one of: ${validQueryKinds.join(', ')}`);
+        process.exit(1);
+      }
+
+      const results = await queryArtifacts(client, cg, {
+        searchTerm,
+        kind: flags.kind as string | undefined,
+        sensitivity: flags.sensitivity as SensitivityLevel | undefined,
+        limit: queryLimit,
+        format: queryFormat,
+      });
+
+      if (!results.length) {
+        console.log('No artifacts found.');
+        break;
+      }
+
+      if (queryFormat === 'json') {
+        console.log(JSON.stringify(results, null, 2));
+      } else {
+        console.log(`Artifacts in Working Memory (${results.length}):\n`);
+        for (const r of results) {
+          console.log(`  📄 ${r.name}`);
+          console.log(`     Kind: ${r.kind} | Status: ${r.status} | Sensitivity: ${r.sensitivity}`);
+          console.log(`     Date: ${r.date} | SHA256: ${r.sha256 || '—'}`);
+          console.log(`     Tags: ${r.tags || '—'} | URI: ${r.uri}`);
+          if (r.contentPreview) {
+            console.log(`     Preview: ${r.contentPreview}`);
+          }
+          console.log();
+        }
       }
       break;
     }

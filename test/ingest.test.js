@@ -393,6 +393,139 @@ describe('ensureContextGraph', () => {
   });
 });
 
+// -- Inter-artifact relationships (derivedFrom, revisionOf) -------------------
+
+describe('ingestFile — derivedFrom', () => {
+  it('passes derivedFrom through to provenance quads', async () => {
+    setupTempDir();
+    try {
+      const filePath = writeTempFile('derived.md', '# Derived Doc');
+      let writtenQuads = [];
+      const client = mockClient({
+        writeAssertion: async (_cg, _name, quads) => {
+          writtenQuads = quads;
+          return { written: quads.length };
+        },
+      });
+      const result = await ingestFile(filePath, {
+        client,
+        contextGraph: 'test-cg',
+        agent: 'TestAgent',
+        derivedFrom: 'source-artifact',
+      });
+      assert.equal(result.error, undefined);
+      const dfQuad = writtenQuads.find(q =>
+        q.predicate.includes('prov#wasDerivedFrom'),
+      );
+      assert.ok(dfQuad, 'should have wasDerivedFrom in provenance quads');
+      assert.ok(dfQuad.object.includes('source-artifact'), 'should reference source artifact');
+    } finally {
+      cleanupTempDir();
+    }
+  });
+
+  it('passes derivedFrom array through to provenance quads', async () => {
+    setupTempDir();
+    try {
+      const filePath = writeTempFile('multi-derived.md', '# Multi Derived');
+      let writtenQuads = [];
+      const client = mockClient({
+        writeAssertion: async (_cg, _name, quads) => {
+          writtenQuads = quads;
+          return { written: quads.length };
+        },
+      });
+      const result = await ingestFile(filePath, {
+        client,
+        contextGraph: 'test-cg',
+        agent: 'TestAgent',
+        derivedFrom: ['source-a', 'source-b'],
+      });
+      assert.equal(result.error, undefined);
+      const dfQuads = writtenQuads.filter(q =>
+        q.predicate.includes('prov#wasDerivedFrom'),
+      );
+      assert.equal(dfQuads.length, 2, 'should have 2 wasDerivedFrom quads');
+    } finally {
+      cleanupTempDir();
+    }
+  });
+});
+
+describe('ingestFile — revisionOf', () => {
+  it('passes revisionOf through to provenance quads', async () => {
+    setupTempDir();
+    try {
+      const filePath = writeTempFile('revision.md', '# Revised Doc');
+      let writtenQuads = [];
+      const client = mockClient({
+        writeAssertion: async (_cg, _name, quads) => {
+          writtenQuads = quads;
+          return { written: quads.length };
+        },
+      });
+      const result = await ingestFile(filePath, {
+        client,
+        contextGraph: 'test-cg',
+        agent: 'TestAgent',
+        revisionOf: 'previous-version',
+      });
+      assert.equal(result.error, undefined);
+      const revQuad = writtenQuads.find(q =>
+        q.predicate.includes('prov#wasRevisionOf'),
+      );
+      assert.ok(revQuad, 'should have wasRevisionOf in provenance quads');
+      assert.ok(revQuad.object.includes('previous-version'), 'should reference previous version');
+    } finally {
+      cleanupTempDir();
+    }
+  });
+});
+
+describe('ingestText — derivedFrom and revisionOf', () => {
+  it('passes derivedFrom through to provenance quads', async () => {
+    let writtenQuads = [];
+    const client = mockClient({
+      writeAssertion: async (_cg, _name, quads) => {
+        writtenQuads = quads;
+        return { written: quads.length };
+      },
+    });
+    const result = await ingestText('derived text', 'derived-title', 'knowledge-artifact', {
+      client,
+      contextGraph: 'test-cg',
+      agent: 'TestAgent',
+      derivedFrom: 'source-artifact',
+    });
+    assert.equal(result.error, undefined);
+    const dfQuad = writtenQuads.find(q =>
+      q.predicate.includes('prov#wasDerivedFrom'),
+    );
+    assert.ok(dfQuad, 'should have wasDerivedFrom in provenance quads');
+  });
+
+  it('passes revisionOf through to provenance quads', async () => {
+    let writtenQuads = [];
+    const client = mockClient({
+      writeAssertion: async (_cg, _name, quads) => {
+        writtenQuads = quads;
+        return { written: quads.length };
+      },
+    });
+    const result = await ingestText('revised text', 'revised-title', 'knowledge-artifact', {
+      client,
+      contextGraph: 'test-cg',
+      agent: 'TestAgent',
+      revisionOf: 'old-version',
+    });
+    assert.equal(result.error, undefined);
+    const revQuad = writtenQuads.find(q =>
+      q.predicate.includes('prov#wasRevisionOf'),
+    );
+    assert.ok(revQuad, 'should have wasRevisionOf in provenance quads');
+  });
+});
+
 // -- Sensitivity & scan features (v0.1.3) -------------------------------------
 
 describe('ingestFile — sensitivity', () => {

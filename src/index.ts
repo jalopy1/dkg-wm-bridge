@@ -25,3 +25,9 @@ export {
   type ScanResult,
   type ScanFinding,
 } from './scanner.js';
+export {
+  queryArtifacts,
+  buildArtifactSparql,
+  type QueryOptions,
+  type ArtifactResult,
+} from './query.js';

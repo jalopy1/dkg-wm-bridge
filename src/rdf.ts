@@ -56,6 +56,10 @@ export interface ArtifactMeta {
   agentAddress?: string;
   /** Sensitivity level for access control (default: shareable) */
   sensitivity?: SensitivityLevel;
+  /** Assertion name(s) this artifact was derived from */
+  derivedFrom?: string | string[];
+  /** Assertion name this artifact is a revision of */
+  revisionOf?: string;
 }
 
 // -- Helpers ------------------------------------------------------------------
@@ -87,6 +91,21 @@ function literal(value: string, datatype?: string): string {
 
 function dateLiteral(iso: string): string {
   return literal(iso, `${XSD}dateTime`);
+}
+
+/**
+ * Validate an assertion name used in inter-artifact relationship URIs.
+ * Only allows alphanumeric, hyphens, underscores, and dots to prevent
+ * URI injection or namespace escape.
+ */
+const SAFE_ASSERTION_NAME = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,254}$/;
+
+function validateAssertionRef(name: string, field: string): void {
+  if (!SAFE_ASSERTION_NAME.test(name)) {
+    throw new Error(
+      `Invalid ${field} value "${name.slice(0, 50)}": must be alphanumeric with hyphens/underscores/dots, 1-255 chars.`,
+    );
+  }
 }
 
 // -- Provenance quads (used with import pipeline) -----------------------------
@@ -133,6 +152,19 @@ export function provenanceQuads(meta: ArtifactMeta): Quad[] {
     for (const tag of meta.tags) {
       q(uri, `${SCHEMA}keywords`, literal(tag));
     }
+  }
+
+  // -- Inter-artifact relationships (validated to prevent URI injection)
+  if (meta.derivedFrom) {
+    const sources = Array.isArray(meta.derivedFrom) ? meta.derivedFrom : [meta.derivedFrom];
+    for (const src of sources) {
+      validateAssertionRef(src, 'derivedFrom');
+      q(uri, `${PROV}wasDerivedFrom`, `${WMB}artifact/${src}`);
+    }
+  }
+  if (meta.revisionOf) {
+    validateAssertionRef(meta.revisionOf, 'revisionOf');
+    q(uri, `${PROV}wasRevisionOf`, `${WMB}artifact/${meta.revisionOf}`);
   }
 
   // -- Agent identity

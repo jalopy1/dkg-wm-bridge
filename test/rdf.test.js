@@ -319,6 +319,100 @@ describe('provenanceQuads', () => {
     assert.ok(sensQ.object.includes('public'), 'sensitivity should be public');
   });
 
+  // -- Inter-artifact relationships (prov:wasDerivedFrom, prov:wasRevisionOf)
+  it('includes prov:wasDerivedFrom when derivedFrom is a single string', () => {
+    const quads = provenanceQuads(baseMeta({ derivedFrom: 'source-artifact-abc' }));
+    const dfQuads = findAllQuads(quads, 'prov#wasDerivedFrom');
+    assert.equal(dfQuads.length, 1, 'should have 1 wasDerivedFrom quad');
+    assert.ok(dfQuads[0].object.includes('urn:dkg:wm-bridge:artifact/'), 'object should use artifact namespace');
+    assert.ok(dfQuads[0].object.includes('source-artifact-abc'), 'object should contain source name');
+  });
+
+  it('includes multiple prov:wasDerivedFrom when derivedFrom is an array', () => {
+    const quads = provenanceQuads(baseMeta({ derivedFrom: ['source-a', 'source-b', 'source-c'] }));
+    const dfQuads = findAllQuads(quads, 'prov#wasDerivedFrom');
+    assert.equal(dfQuads.length, 3, 'should have 3 wasDerivedFrom quads');
+    const objects = dfQuads.map(q => q.object);
+    assert.ok(objects.some(o => o.includes('source-a')), 'should include source-a');
+    assert.ok(objects.some(o => o.includes('source-b')), 'should include source-b');
+    assert.ok(objects.some(o => o.includes('source-c')), 'should include source-c');
+  });
+
+  it('includes prov:wasRevisionOf when revisionOf is provided', () => {
+    const quads = provenanceQuads(baseMeta({ revisionOf: 'previous-version' }));
+    const revQuads = findAllQuads(quads, 'prov#wasRevisionOf');
+    assert.equal(revQuads.length, 1, 'should have 1 wasRevisionOf quad');
+    assert.ok(revQuads[0].object.includes('urn:dkg:wm-bridge:artifact/'), 'object should use artifact namespace');
+    assert.ok(revQuads[0].object.includes('previous-version'), 'object should contain revision name');
+  });
+
+  it('does not include wasDerivedFrom or wasRevisionOf when not provided', () => {
+    const quads = provenanceQuads(baseMeta());
+    const dfQuads = findAllQuads(quads, 'prov#wasDerivedFrom');
+    const revQuads = findAllQuads(quads, 'prov#wasRevisionOf');
+    assert.equal(dfQuads.length, 0, 'should have no wasDerivedFrom quads');
+    assert.equal(revQuads.length, 0, 'should have no wasRevisionOf quads');
+  });
+
+  it('generates correct quad count with derivedFrom and revisionOf', () => {
+    const quads = provenanceQuads(baseMeta({ derivedFrom: ['a', 'b'], revisionOf: 'prev' }));
+    // 16 base + 2 wasDerivedFrom + 1 wasRevisionOf = 19
+    assert.equal(quads.length, 19);
+  });
+
+  // -- Security: assertion name validation for derivedFrom / revisionOf
+  it('rejects derivedFrom with path traversal characters', () => {
+    assert.throws(
+      () => provenanceQuads(baseMeta({ derivedFrom: '../../etc/passwd' })),
+      /Invalid derivedFrom/,
+      'should reject path traversal in derivedFrom',
+    );
+  });
+
+  it('rejects derivedFrom with URI injection', () => {
+    assert.throws(
+      () => provenanceQuads(baseMeta({ derivedFrom: 'foo> <evil:pred> <evil:obj' })),
+      /Invalid derivedFrom/,
+      'should reject URI injection in derivedFrom',
+    );
+  });
+
+  it('rejects revisionOf with path traversal characters', () => {
+    assert.throws(
+      () => provenanceQuads(baseMeta({ revisionOf: '../secret-artifact' })),
+      /Invalid revisionOf/,
+      'should reject path traversal in revisionOf',
+    );
+  });
+
+  it('rejects revisionOf with spaces and special characters', () => {
+    assert.throws(
+      () => provenanceQuads(baseMeta({ revisionOf: 'name with spaces' })),
+      /Invalid revisionOf/,
+      'should reject names with spaces',
+    );
+  });
+
+  it('safely ignores empty string derivedFrom (falsy guard)', () => {
+    const quads = provenanceQuads(baseMeta({ derivedFrom: '' }));
+    const dfQuads = findAllQuads(quads, 'prov#wasDerivedFrom');
+    assert.equal(dfQuads.length, 0, 'empty string derivedFrom should produce no wasDerivedFrom quads');
+  });
+
+  it('accepts valid assertion names in derivedFrom', () => {
+    const quads = provenanceQuads(baseMeta({ derivedFrom: 'wm-bridge-document-abc123def456' }));
+    const dfQuads = findAllQuads(quads, 'prov#wasDerivedFrom');
+    assert.equal(dfQuads.length, 1);
+    assert.ok(dfQuads[0].object.includes('wm-bridge-document-abc123def456'));
+  });
+
+  it('accepts valid assertion names with dots and underscores', () => {
+    const quads = provenanceQuads(baseMeta({ revisionOf: 'artifact_v1.2.3' }));
+    const revQuads = findAllQuads(quads, 'prov#wasRevisionOf');
+    assert.equal(revQuads.length, 1);
+    assert.ok(revQuads[0].object.includes('artifact_v1.2.3'));
+  });
+
   // -- Does NOT include raw content (unlike artifactToQuads)
   it('does not include schema:text content blob', () => {
     const quads = provenanceQuads(baseMeta());
