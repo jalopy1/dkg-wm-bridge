@@ -4,6 +4,8 @@ Agent-plugin that deposits workspace artifacts into DKG v10 Working Memory with 
 
 Works with OpenClaw, Hermes, and any agent that produces text artifacts.
 
+[![Demo](https://asciinema.org/a/99wdrB3KVZ8EvNMt.svg)](https://asciinema.org/a/99wdrB3KVZ8EvNMt)
+
 ## What It Does
 
 Takes the knowledge artifacts an agent produces — daily memory logs, long-term memory, research notes, session summaries — and writes them into DKG v10 Working Memory as structured RDF with:
