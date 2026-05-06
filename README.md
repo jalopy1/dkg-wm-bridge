@@ -38,7 +38,27 @@ wm-bridge ingest notes.md --sensitivity personal
 
 ### Automatic Scanning
 
-Use `--scan` to run PII and secret detection before ingesting. The scanner checks for API keys, tokens, email addresses, IP addresses, home directory paths, and SSH private keys.
+Use `--scan` to run PII and secret detection before ingesting. The scanner checks for:
+
+**Secrets (blocks ingestion):**
+- API keys and tokens (generic key=value patterns)
+- GitHub tokens (`ghp_`, `ghs_`)
+- npm tokens
+- OpenAI/Stripe/SendGrid/Twilio keys
+- JWT tokens (`eyJ...`)
+- SSH and PGP private keys
+- Ethereum/wallet private keys (64-char hex)
+- Database connection strings (postgres, mysql, mongodb, redis, amqp)
+- Slack and Discord webhook URLs
+- Bearer tokens
+
+**PII (flags as personal):**
+- Email addresses
+- Phone numbers (international and area code formats)
+- IP addresses
+- Credit card numbers (Visa, Mastercard, Amex, Discover)
+- Home directory paths (Linux, macOS, Windows)
+- MAC addresses
 
 ```bash
 wm-bridge ingest research.md --scan
@@ -49,6 +69,22 @@ If secrets are found, ingestion is blocked. If PII is found, the artifact is aut
 ### Promotion Guards
 
 The `promote` command refuses to promote artifacts classified as `personal` or `secret`. This ensures sensitive content stays in Working Memory on the operator's own node and never reaches Shared Memory or the broader network.
+
+Additionally, `promote` asks for interactive confirmation before publishing, showing the artifact name and sensitivity level:
+
+```bash
+$ wm-bridge promote wm-bridge-research-note-a1b2c3d4
+⚡ About to promote "wm-bridge-research-note-a1b2c3d4" (sensitivity: public) to Shared Memory.
+   This will publish the artifact to the DKG network.
+   Proceed? [y/N] y
+✅ Promoted "wm-bridge-research-note-a1b2c3d4" → Shared Memory (21 quads)
+```
+
+Use `--yes` or `-y` to skip confirmation for automation:
+
+```bash
+wm-bridge promote wm-bridge-research-note-a1b2c3d4 --yes
+```
 
 ### Audit Logging
 
@@ -93,10 +129,26 @@ wm-bridge info wm-bridge-memory-daily-a1b2c3d4
 | `init` | Create context graph, auto-detect peer ID, save config |
 | `ingest <file\|dir>` | Ingest markdown files into Working Memory |
 | `ingest-text <title> <text>` | Ingest inline text into Working Memory |
+| `query [search-term]` | Search/list artifacts with filters and detail |
 | `promote <name>` | Promote an assertion from WM to Shared Memory |
 | `discard <name>` | Discard an assertion from Working Memory |
 | `status` | List artifacts currently in Working Memory |
 | `info <name>` | Show assertion details and history |
+
+### Query Output
+
+The `query` command returns artifact details including the `assertionName` needed for `promote` and `discard`:
+
+```bash
+# Human-readable output
+wm-bridge query --limit 5
+
+# JSON output (includes assertionName for piping to other commands)
+wm-bridge query --format json
+
+# Filter by search term, kind, or sensitivity
+wm-bridge query "research" --kind research-note --sensitivity public
+```
 
 ## Options
 
@@ -110,6 +162,7 @@ wm-bridge info wm-bridge-memory-daily-a1b2c3d4
 | `--recursive, -r` | Recurse into subdirectories |
 | `--sensitivity <level>` | Sensitivity: `public\|shareable\|personal\|secret` |
 | `--scan` | Run PII/secret detection before ingesting |
+| `--yes, -y` | Skip interactive confirmation (for automation) |
 | `--dry-run` | Preview without writing |
 
 ## Multi-Agent Support

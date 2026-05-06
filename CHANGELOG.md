@@ -2,6 +2,19 @@
 
 All notable changes to dkg-wm-bridge are documented here.
 
+## [0.1.6] — 2026-05-06
+
+### Added
+- **Scanner patterns**: phone numbers (international + area code), JWT tokens, database connection strings (postgres/mysql/mongodb/redis/amqp), Slack & Discord webhook URLs, Stripe keys, SendGrid keys, Twilio keys, PGP private keys, credit card numbers (Visa/MC/Amex/Discover), MAC addresses, Windows/macOS home directory paths
+- **Query `assertionName` field**: JSON and human-readable query output now includes the assertion name needed for `promote`/`discard` commands
+- **Promote confirmation**: interactive `[y/N]` prompt before publishing to Shared Memory, showing artifact name and sensitivity level
+- `--yes` / `-y` flag to skip promote confirmation (for automation/CI)
+
+### Fixed
+- Phone number regex tightened to prevent false positives on webhook IDs, URLs, and credit card numbers
+- Removed overly broad `aws-secret-key` pattern (matched any 40-char alphanumeric string)
+- GitHub token pattern now matches both `ghp_` and `ghs_` prefixes
+
 ## [0.1.5] — 2026-04-27
 
 ### Changed
