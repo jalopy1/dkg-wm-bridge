@@ -95,6 +95,7 @@ Options:
   --derived-from <n1,n2,...>    Assertion name(s) this artifact was derived from
   --revision-of <name>          Assertion name this artifact is a revision of
   --scan                        Run PII/secret scanner before ingesting
+  --yes, -y                     Skip interactive confirmation (for automation)
   --kind <type>                 Artifact kind: memory-daily|research-note|document|... (default: knowledge-artifact)
   --tags <t1,t2,...>            Comma-separated tags
   --limit <n>                   Max results for query (default: 10)
@@ -122,6 +123,7 @@ function parseArgs(argv: string[]): { command: string; positional: string[]; fla
     if (!command && !arg.startsWith('-')) { command = arg; continue; }
     if (arg === '--help' || arg === '-h') { flags.help = true; continue; }
     if (arg === '--dry-run') { flags.dryRun = true; continue; }
+    if (arg === '--yes' || arg === '-y') { flags.yes = true; continue; }
     if (arg === '--recursive' || arg === '-r') { flags.recursive = true; continue; }
     if (arg === '--scan') { flags.scan = true; continue; }
     if ((arg === '--context-graph' || arg === '-c') && argv[i + 1]) { flags.contextGraph = argv[++i]; continue; }
@@ -347,6 +349,7 @@ async function handlePromote(
   }
 
   // Check sensitivity before promoting
+  let sensValue = 'unknown';
   try {
     const { quads: checkQuads } = await client.queryAssertion(cg, positional[0]);
     const sensitivityPred = `${WMBO}sensitivity`;
@@ -354,7 +357,7 @@ async function handlePromote(
       (q: any) => q.predicate === sensitivityPred,
     );
     if (sensitivityQuad) {
-      const sensValue = cleanLiteral(sensitivityQuad.object);
+      sensValue = cleanLiteral(sensitivityQuad.object);
       if (sensValue === 'personal' || sensValue === 'secret') {
         const msg = `🚫 Cannot promote "${positional[0]}" — sensitivity is "${sensValue}". Only "public" or "shareable" artifacts can be promoted to Shared Memory.`;
         console.error(msg);
@@ -365,6 +368,25 @@ async function handlePromote(
   } catch {
     console.warn('⚠️  Could not verify sensitivity tag — proceeding with caution');
     auditLog('promote', positional[0], 'unknown', 'sensitivity-check-failed');
+  }
+
+  // Interactive confirmation unless --yes is passed
+  if (!flags.yes) {
+    const { createInterface } = await import('node:readline');
+    const rl = createInterface({ input: process.stdin, output: process.stdout });
+    const answer = await new Promise<string>((resolve) => {
+      rl.question(
+        `\n⚡ About to promote "${positional[0]}" (sensitivity: ${sensValue}) to Shared Memory.\n` +
+        `   This will publish the artifact to the DKG network.\n` +
+        `   Proceed? [y/N] `,
+        resolve,
+      );
+    });
+    rl.close();
+    if (!answer.match(/^y(es)?$/i)) {
+      console.log('Aborted.');
+      process.exit(0);
+    }
   }
 
   const result = await promoteArtifact(client, cg, positional[0]);
@@ -389,7 +411,7 @@ async function handlePromote(
   }
 
   console.log(`✅ Promoted "${positional[0]}" → Shared Memory (${count} quads)`);
-  auditLog('promote', positional[0], 'shareable', 'ok');
+  auditLog('promote', positional[0], sensValue, 'ok');
 }
 
 async function handleDiscard(
@@ -477,6 +499,7 @@ async function handleQuery(
     console.log(`Artifacts in Working Memory (${results.length}):\n`);
     for (const r of results) {
       console.log(`  📄 ${r.name}`);
+      console.log(`     Assertion: ${r.assertionName || '—'}`);
       console.log(`     Kind: ${r.kind} | Status: ${r.status} | Sensitivity: ${r.sensitivity}`);
       console.log(`     Date: ${r.date} | SHA256: ${r.sha256 || '—'}`);
       console.log(`     Tags: ${r.tags || '—'} | URI: ${r.uri}`);

@@ -30,6 +30,7 @@ export interface QueryOptions {
 
 export interface ArtifactResult {
   uri: string;
+  assertionName: string;
   name: string;
   kind: string;
   status: string;
@@ -145,11 +146,17 @@ export async function queryArtifacts(
   const mapped = bindings.map((row) => {
     const content = cleanLiteral(row.content);
     const preview = content.length > 200 ? content.slice(0, 200) + '...' : content;
+    const kind = cleanLiteral(row.kind);
+    const uri = row.s ?? '';
+    // Derive assertion name from URI hash + kind (matches ingest naming: wm-bridge-${kind}-${hash})
+    const hashMatch = uri.match(/artifact\/([a-f0-9]+)$/);
+    const assertionName = hashMatch ? `wm-bridge-${kind}-${hashMatch[1]}` : '';
 
     return {
-      uri: row.s ?? '',
+      uri,
+      assertionName,
       name: cleanLiteral(row.name),
-      kind: cleanLiteral(row.kind),
+      kind,
       status: cleanLiteral(row.status),
       sensitivity: cleanLiteral(row.sensitivity),
       date: cleanLiteral(row.date),

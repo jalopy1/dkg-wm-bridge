@@ -30,19 +30,33 @@ interface PatternDef {
 }
 
 const PATTERNS: PatternDef[] = [
-  // Secrets
+  // Secrets — API keys and tokens
   { type: 'secret', name: 'api-key', regex: /(api[_-]?key|api[_-]?token|password|secret[_-]?key|credential)\s*[:=]\s*\S+/gi },
   { type: 'secret', name: 'env-secret', regex: /[A-Z_]*(TOKEN|KEY|SECRET|PASSWORD)\s*[:=]\s*\S{8,}/g },
-  { type: 'secret', name: 'github-token', regex: /ghp_[a-zA-Z0-9]{36}/g },
+  { type: 'secret', name: 'github-token', regex: /gh[ps]_[a-zA-Z0-9]{36,}/g },
   { type: 'secret', name: 'npm-token', regex: /npm_[a-zA-Z0-9]{36}/g },
   { type: 'secret', name: 'bearer-token', regex: /Bearer\s+[a-zA-Z0-9\-._~+/]{20,}/g },
   { type: 'secret', name: 'sk-token', regex: /sk-[a-zA-Z0-9]{20,}/g },
   { type: 'secret', name: 'wallet-private-key', regex: /0x[a-fA-F0-9]{64}/g },
+  { type: 'secret', name: 'jwt-token', regex: /eyJ[a-zA-Z0-9_-]{10,}\.eyJ[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{10,}/g },
+  { type: 'secret', name: 'aws-access-key', regex: /AKIA[0-9A-Z]{16}/g },
+  { type: 'secret', name: 'slack-webhook', regex: /https:\/\/hooks\.slack\.com\/services\/T[a-zA-Z0-9_]+\/B[a-zA-Z0-9_]+\/[a-zA-Z0-9_]+/g },
+  { type: 'secret', name: 'discord-webhook', regex: /https:\/\/discord(?:app)?\.com\/api\/webhooks\/\d+\/[a-zA-Z0-9_-]+/g },
+  { type: 'secret', name: 'db-connection-string', regex: /(postgres|mysql|mongodb|redis|amqp):\/\/[^\s"']+/gi },
+  { type: 'secret', name: 'stripe-key', regex: /[sr]k_(live|test)_[a-zA-Z0-9]{20,}/g },
+  { type: 'secret', name: 'sendgrid-key', regex: /SG\.[a-zA-Z0-9_-]{22}\.[a-zA-Z0-9_-]{43}/g },
+  { type: 'secret', name: 'twilio-key', regex: /SK[a-f0-9]{32}/g },
+  { type: 'secret', name: 'heroku-key', regex: /[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}/g },
+  { type: 'secret', name: 'pgp-private-key', regex: /-----BEGIN PGP PRIVATE KEY BLOCK-----/g },
+  { type: 'secret', name: 'ssh-key', regex: /-----BEGIN\s+(RSA|DSA|EC|OPENSSH)\s+PRIVATE\s+KEY-----/g },
   // PII
   { type: 'pii', name: 'ip-address', regex: /\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(:\d+)?\b/g },
   { type: 'pii', name: 'email', regex: /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g },
-  { type: 'pii', name: 'home-dir', regex: /\/home\/[a-z][a-z0-9_-]*/g },
-  { type: 'pii', name: 'ssh-key', regex: /-----BEGIN\s+(RSA|DSA|EC|OPENSSH)\s+PRIVATE\s+KEY-----/g },
+  { type: 'pii', name: 'phone-number', regex: /(?:\+\d{1,3}[\s.-])?\(?\d{2,4}\)[\s.-]\d{3,4}[\s.-]\d{3,4}\b/g },
+  { type: 'pii', name: 'phone-intl', regex: /\+\d{1,3}[\s.-]\d{2,4}[\s.-]\d{3,4}[\s.-]?\d{0,4}\b/g },
+  { type: 'pii', name: 'credit-card', regex: /\b(?:4\d{3}|5[1-5]\d{2}|3[47]\d{2}|6(?:011|5\d{2}))[- ]?\d{4}[- ]?\d{4}[- ]?\d{4}\b/g },
+  { type: 'pii', name: 'home-dir', regex: /(?:\/home\/[a-z][a-z0-9_-]*|\/Users\/[a-zA-Z][a-zA-Z0-9_-]*|C:\\Users\\[a-zA-Z][a-zA-Z0-9_-]*)/g },
+  { type: 'pii', name: 'mac-address', regex: /\b([0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}\b/g },
 ];
 
 // -- Helpers ------------------------------------------------------------------
